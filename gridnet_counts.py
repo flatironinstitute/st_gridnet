@@ -168,7 +168,8 @@ def parse_args():
 if __name__ == "__main__":
 	args = parse_args()
 
-	st_count_dataset = STCountDataset(args.countdir, args.labeldir, args.metadata, (args.hst, args.wst))
+	st_count_dataset = STCountDataset(args.countdir, args.labeldir, args.metadata, (args.hst, args.wst), 
+		normalize_spots=True)
 
 	# Create train-test split, then declare DataLoaders, which handle batching.
 	n_val = int(0.2*len(st_count_dataset))
@@ -189,9 +190,4 @@ if __name__ == "__main__":
 
 	if args.output_file is not None:
 		torch.save(best_model.state_dict(), args.output_file)
-
-
-
-
-
 
