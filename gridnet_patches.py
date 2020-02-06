@@ -223,3 +223,33 @@ if __name__ == "__main__":
 	optimizer = optim.Adam(gnet.parameters(), lr=0.001)
 
 	best_model, hist = train_model(gnet, dataloaders, criterion, optimizer, num_epochs=EPOCHS)
+
+	# Visualize results from patch predictions, grid predictions on batches of train, test set
+	gnet.load_state_dict(best_model)
+	gnet.eval()
+	gnet.patch_classifier.eval()
+	torch.set_grad_enabled(False)
+
+	train_input, train_labels = next(iter(dataloaders["train"]))
+	test_input, test_labels = next(iter(dataloaders["val"]))
+
+	for batch, labels, name in [(train_input, train_labels, "train"), (test_input, test_labels, "test")]:
+
+		patchpred = np.argmax(gnet.patch_predictions(batch).data.numpy(), axis=1)
+		gridpred = np.argmax(gnet(batch).data.numpy(), axis=1)
+		labels = labels.data.numpy()
+		gridpred[labels==0] = 0
+
+		fig, ax = plt.subplots(BATCH_SIZE, 3, figsize=(9,3*BATCH_SIZE))
+
+		for i in range(BATCH_SIZE):
+			ax[i][0].imshow(patchpred[i], vmin=0, vmax=fgd_classes)
+			ax[i][1].imshow(gridpred[i], vmin=0, vmax=fgd_classes)
+			ax[i][2].imshow(labels[i], vmin=0, vmax=fgd_classes)
+
+		ax[0][0].set_title("Patch Classifier")
+		ax[0][1].set_title("GridNet")
+		ax[0][2].set_title("True Labels")
+
+		plt.savefig("gridnet_"+name+"_batch.png", format="png", dpi=300)
+
