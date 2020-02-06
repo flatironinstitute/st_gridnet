@@ -79,7 +79,7 @@ from patch_classifier import PatchCNN
 from datasets import STPatchDataset
 
 
-def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
+def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile=None):
     since = time.time()
 
     val_acc_history = []
@@ -154,6 +154,9 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25):
             if phase == 'val' and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 best_model_wts = copy.deepcopy(model.state_dict())
+
+                if outfile is not None:
+                	torch.save(model.state_dict(), outfile)
             if phase == 'val':
                 val_acc_history.append(epoch_acc)
 
@@ -172,7 +175,7 @@ def parse_args():
 	parser.add_argument('imgdir', type=str, help="Path to directory containing training images.")
 	parser.add_argument('lbldir', type=str, help="Path to directory containing training labels.")
 	parser.add_argument('-a', '--accum-size', type=int, default=1, help='Perform optimizer step every "a" batches.')
-	parser.add_argument('-o', '--output-dir', type=str, default=None, help='Directory to save test image performance.')
+	parser.add_argument('-o', '--output-file', type=str, default=None, help='Path to file in which to save best model.')
 	parser.add_argument('-n', '--epochs', type=int, default=5, help='Number of training epochs.')
 	parser.add_argument('-b', '--batch-size', type=int, default=1, help='Batch size.')
 	parser.add_argument('-c', '--grad-checkpoints', type=int, default=0, help='Number of gradient checkpoints.')
@@ -183,7 +186,7 @@ if __name__ == "__main__":
 	args = parse_args()
 
 	ACCUM_SIZE = args.accum_size
-	OUT_DIR = args.output_dir
+	OUT_FILE = args.output_file
 	EPOCHS = args.epochs
 	BATCH_SIZE = args.batch_size
 	CP = args.grad_checkpoints
@@ -222,4 +225,4 @@ if __name__ == "__main__":
 	criterion = nn.CrossEntropyLoss()
 	optimizer = optim.Adam(gnet.parameters(), lr=0.001)
 
-	best_model, hist = train_model(gnet, dataloaders, criterion, optimizer, num_epochs=EPOCHS)
+	best_model, hist = train_model(gnet, dataloaders, criterion, optimizer, num_epochs=EPOCHS, outfile=OUT_FILE)
