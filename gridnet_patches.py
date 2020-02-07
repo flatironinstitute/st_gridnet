@@ -225,12 +225,11 @@ if __name__ == "__main__":
 	criterion = nn.CrossEntropyLoss()
 	optimizer = optim.Adam(gnet.parameters(), lr=0.001)
 
-	best_model, hist = train_model(gnet, dataloaders, criterion, optimizer, num_epochs=EPOCHS, outfile=OUT_FILE)
+	gnet_fit, hist = train_model(gnet, dataloaders, criterion, optimizer, num_epochs=EPOCHS, outfile=OUT_FILE)
 
 	# Visualize results from patch predictions, grid predictions on batches of train, test set
-	gnet.load_state_dict(best_model)
-	gnet.eval()
-	gnet.patch_classifier.eval()
+	gnet_fit.eval()
+	gnet_fit.patch_classifier.eval()
 	torch.set_grad_enabled(False)
 
 	train_input, train_labels = next(iter(dataloaders["train"]))
@@ -238,8 +237,8 @@ if __name__ == "__main__":
 
 	for batch, labels, name in [(train_input, train_labels, "train"), (test_input, test_labels, "test")]:
 
-		patchpred = np.argmax(gnet.patch_predictions(batch).data.numpy(), axis=1)
-		gridpred = np.argmax(gnet(batch).data.numpy(), axis=1)
+		patchpred = np.argmax(gnet_fit.patch_predictions(batch).data.numpy(), axis=1)
+		gridpred = np.argmax(gnet_fit(batch).data.numpy(), axis=1)
 		labels = labels.data.numpy()
 		gridpred[labels==0] = 0
 
