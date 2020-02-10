@@ -134,3 +134,91 @@ class STPatchDataset(STImageDataset):
         grid = grid.permute(1,2,0,3,4)
                 
         return grid, self.get_lbl_tensor(idx)
+
+##############################
+
+import pandas as pd
+import linecache
+
+class CountDataset(Dataset):
+    def __init__(self, count_dir, label_dir):
+        super(CountDataset, self).__init__()
+        self.count_dir = count_dir
+        self.label_dir = label_dir
+
+        self.spot_inds = []
+        self.spot_coords = []
+        for f in os.listdir(count_dir):
+            if f.endswith(".csv"):
+                df = pd.read_csv(os.path.join(count_dir, f), usecols=["x_coord", "y_coord"])
+                sc = df.values.tolist()
+                si = [p for p in enumerate([f.split(".")[0]]*len(sc))]
+
+                self.spot_inds += si
+                self.spot_coords += sc
+
+    def __len__(self):
+        return len(self.spot_inds)
+
+    def __getitem__(self, idx):
+        line_no, file = self.spot_inds[idx]
+        x, y = self.spot_coords[idx]
+        x, y = int(np.rint(x)), int(np.rint(y))
+
+        line = linecache.getline(os.path.join(self.count_dir, file+".csv"), line_no+2)
+        expr_vec = np.array([float(s) for s in line.split(",")[2:]])
+        
+        labels = np.array(Image.open(os.path.join(self.label_dir, file+".png")))
+
+        return torch.from_numpy(expr_vec).float(), torch.tensor(labels[y,x])
+
+class CountGridDataset(Dataset):
+    def __init__(self, count_dir, label_dir):
+        self.count_dir = count_dir
+        self.label_dir = label_dir
+        
+        self.fnames = []
+        for f in os.listdir(count_dir):
+            if f.endswith(".csv"):
+                self.fnames.append(f)
+
+    def __len__(self):
+        return len(self.fnames)
+
+    def __getitem__(self, idx):
+        lf = os.path.join(self.label_dir, self.fnames[idx].split(".")[0]+".png")
+        label_mat = np.array(Image.open(lf))
+
+        spot_counts = np.loadtxt(os.path.join(self.count_dir, self.fnames[idx]), skiprows=1, delimiter=",")
+
+        g = spot_counts.shape[1]-2
+        count_mat = np.zeros((g,) + label_mat.shape)
+
+        for c in spot_counts:
+            if label_mat[int(c[1]), int(c[0])] > 0:
+                count_mat[:, int(c[1]), int(c[0])] = c[2:]
+                
+        return torch.from_numpy(count_mat).float(), torch.from_numpy(label_mat).long()
+
+
+from torch.utils.data import DataLoader
+
+if __name__ == "__main__":
+    count_dir = os.path.expanduser("~/Desktop/mouse_sc_stdataset_20200207/counts/")
+    label_dir = os.path.expanduser("~/Desktop/mouse_sc_stdataset_20200207/labels/")
+
+    cd = CountGridDataset(count_dir, label_dir)
+    dl = DataLoader(cd, batch_size=5, shuffle=True)
+
+    for x,y in dl:
+        print(x.shape, y.shape)
+    
+
+
+
+
+
+
+
+
+
