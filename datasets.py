@@ -135,10 +135,95 @@ class STPatchDataset(STImageDataset):
                 
         return grid, self.get_lbl_tensor(idx)
 
+
 ##############################
 
 import pandas as pd
 import linecache
+import re
+
+class PatchDataset(Dataset):
+    def __init__(self, img_dir, label_dir):
+        super(PatchDataset, self).__init__()
+        self.img_dir = img_dir
+        self.label_dir = label_dir
+
+        self.patch_list = []
+        self.coord_list = []
+
+        rxp = re.compile("(\d+)_(\d+).jpg")
+
+        # Look at each sub-directory, which each indicate a separate slide.
+        dir_iter = os.walk(img_dir)
+        top = next(dir_iter)
+        for root, _, files in dir_iter:
+
+            # Look for all correctly formatted image files within the subdirectories.
+            for f in files:
+                res = rxp.match(f)
+                
+                if res is not None:
+                    self.patch_list.append(os.path.join(root, f))
+                    x, y = int(res.groups()[0]), int(res.groups()[1])
+                    self.coord_list.append([os.path.basename(root), x, y])
+
+        self.preprocess = Compose([ToTensor()])
+
+    def __len__(self):
+        return len(self.patch_list)
+
+    def __getitem__(self, idx):
+        img = Image.open(self.patch_list[idx])
+        img = self.preprocess(img)
+
+        base, x, y = self.coord_list[idx]
+        lbl = Image.open(os.path.join(self.label_dir, base+".png")).getpixel((x,y))
+
+        return img.float(), torch.tensor(lbl).long()
+
+class PatchGridDataset(Dataset):
+    def __init__(self, img_dir, label_dir):
+        super(PatchGridDataset, self).__init__()
+        self.img_dir = img_dir
+        self.label_dir = label_dir
+
+        self.grid_list = []
+
+        for f in os.listdir(label_dir):
+            if f.endswith(".png"):
+                s = f.split(".")[0]
+                if s in os.listdir(img_dir):
+                    self.grid_list.append(s)
+
+        self.preprocess = Compose([ToTensor()])
+        self.totensor = ToTensor()
+
+    def __len__(self):
+        return len(self.grid_list)
+
+    def __getitem__(self, idx):
+        label_grid = Image.open(os.path.join(self.label_dir, self.grid_list[idx]+".png"))
+        label_grid = torch.squeeze(self.totensor(label_grid))
+        h_st, w_st = label_grid.shape
+
+        patch_grid = None
+
+        rxp = re.compile("(\d+)_(\d+).jpg")
+        for f in os.listdir(os.path.join(self.img_dir, self.grid_list[idx])):
+            res = rxp.match(f)
+            if res is not None:
+                x, y = int(res.groups()[0]), int(res.groups()[1])
+
+                patch = Image.open(os.path.join(self.img_dir, self.grid_list[idx], f))
+                patch = self.preprocess(patch)
+
+                if patch_grid is None:
+                    c,h,w = patch.shape
+                    patch_grid = torch.zeros(h_st, w_st, c, h, w)
+
+                patch_grid[y,x] = patch
+
+        return patch_grid.float(), label_grid.long()
 
 class CountDataset(Dataset):
     def __init__(self, count_dir, label_dir):
@@ -148,6 +233,8 @@ class CountDataset(Dataset):
 
         self.spot_inds = []
         self.spot_coords = []
+        # TODO: Replace with cheaper line counting scheme (perhaps readline+pass is faster than pandas)
+        # Additionally, store list of ordered [slide, nspots] pairs instead, and find slide+line# in O(N) time?
         for f in os.listdir(count_dir):
             if f.endswith(".csv"):
                 df = pd.read_csv(os.path.join(count_dir, f), usecols=["x_coord", "y_coord"])
@@ -202,23 +289,21 @@ class CountGridDataset(Dataset):
 
 
 from torch.utils.data import DataLoader
+from matplotlib import pyplot as plt
 
 if __name__ == "__main__":
     count_dir = os.path.expanduser("~/Desktop/mouse_sc_stdataset_20200207/counts/")
     label_dir = os.path.expanduser("~/Desktop/mouse_sc_stdataset_20200207/labels/")
+    image_dir = os.path.expanduser("~/Desktop/mouse_sc_stdataset_20200207/imgs/")
 
-    cd = CountGridDataset(count_dir, label_dir)
-    dl = DataLoader(cd, batch_size=5, shuffle=True)
+    cd = CountDataset(count_dir, label_dir)
+    x,y = cd[10]
+    print(x.shape, y.shape)
 
-    for x,y in dl:
-        print(x.shape, y.shape)
-    
+    pd = PatchDataset(image_dir, label_dir)
+    x,y = pd[10]
+    print(x.shape, y.shape)
 
-
-
-
-
-
-
-
+    #for x,y in dl:
+    #    print(x.shape, y.shape)
 
