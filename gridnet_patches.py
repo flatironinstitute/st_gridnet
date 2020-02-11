@@ -7,7 +7,7 @@ import numpy as np
 
 
 class GridNet(nn.Module):
-	def __init__(self, patch_classifier, patch_shape, grid_shape, n_classes, pksize=3, gksize=3, poolsize=2):
+	def __init__(self, patch_classifier, patch_shape, grid_shape, n_classes):
 		super(GridNet, self).__init__()
 
 		self.patch_shape = patch_shape
@@ -240,7 +240,12 @@ if __name__ == "__main__":
 		patchpred = np.argmax(gnet_fit.patch_predictions(batch).data.numpy(), axis=1)
 		gridpred = np.argmax(gnet_fit(batch).data.numpy(), axis=1)
 		labels = labels.data.numpy()
+
+		# Recall that output of gnet has dimensionality N_class - want to render foreground patches only, and as distinct from background (0)
 		gridpred[labels==0] = 0
+		gridpred[labels>0] += 1
+		patchpred[labels==0] = 0
+		patchpred[labels>0] += 1
 
 		fig, ax = plt.subplots(BATCH_SIZE, 3, figsize=(9,3*BATCH_SIZE))
 
