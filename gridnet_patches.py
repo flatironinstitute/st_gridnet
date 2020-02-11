@@ -73,6 +73,7 @@ import sys, os, time, copy
 import argparse
 
 import matplotlib
+matplotlib.use('agg')
 from matplotlib import pyplot as plt
 
 from patch_classifier import PatchCNN
@@ -226,6 +227,7 @@ if __name__ == "__main__":
 	optimizer = optim.Adam(gnet.parameters(), lr=0.001)
 
 	gnet_fit, hist = train_model(gnet, dataloaders, criterion, optimizer, num_epochs=EPOCHS, outfile=OUT_FILE)
+	gnet_fit.to("cpu")
 
 	# Visualize results from patch predictions, grid predictions on batches of train, test set
 	gnet_fit.eval()
