@@ -143,7 +143,7 @@ import linecache
 import re
 
 class PatchDataset(Dataset):
-    def __init__(self, img_dir, label_dir):
+    def __init__(self, img_dir, label_dir, transforms=None):
         super(PatchDataset, self).__init__()
         self.img_dir = img_dir
         self.label_dir = label_dir
@@ -167,7 +167,9 @@ class PatchDataset(Dataset):
                     x, y = int(res.groups()[0]), int(res.groups()[1])
                     self.coord_list.append([os.path.basename(root), x, y])
 
-        self.preprocess = Compose([ToTensor()])
+        self.preprocess = transforms
+        if transforms is None:
+            self.preprocess = Compose([ToTensor()])
 
     def __len__(self):
         return len(self.patch_list)
@@ -182,7 +184,7 @@ class PatchDataset(Dataset):
         return img.float(), torch.tensor(lbl).long()
 
 class PatchGridDataset(Dataset):
-    def __init__(self, img_dir, label_dir):
+    def __init__(self, img_dir, label_dir, transforms=None):
         super(PatchGridDataset, self).__init__()
         self.img_dir = img_dir
         self.label_dir = label_dir
@@ -195,7 +197,9 @@ class PatchGridDataset(Dataset):
                 if s in os.listdir(img_dir):
                     self.grid_list.append(s)
 
-        self.preprocess = Compose([ToTensor()])
+        self.preprocess = transforms
+        if transforms is None:
+            self.preprocess = Compose([ToTensor()])
         self.totensor = ToTensor()
 
     def __len__(self):
@@ -292,18 +296,31 @@ from torch.utils.data import DataLoader
 from matplotlib import pyplot as plt
 
 if __name__ == "__main__":
-    count_dir = os.path.expanduser("~/Desktop/mouse_sc_stdataset_20200207/counts/")
-    label_dir = os.path.expanduser("~/Desktop/mouse_sc_stdataset_20200207/labels/")
-    image_dir = os.path.expanduser("~/Desktop/mouse_sc_stdataset_20200207/imgs/")
+    count_dir = os.path.expanduser("~/Dropbox (Simons Foundation)/mouse_sc_stdataset_20200207/counts/")
+    label_dir = os.path.expanduser("~/Dropbox (Simons Foundation)/mouse_sc_stdataset_20200207/labels/")
+    image_dir = os.path.expanduser("~/Dropbox (Simons Foundation)/mouse_sc_stdataset_20200207/imgs/")
 
-    cd = CountDataset(count_dir, label_dir)
-    x,y = cd[10]
+    pd = PatchGridDataset(image_dir, label_dir)
+    print(len(pd))
+    x,y = pd[0]
     print(x.shape, y.shape)
+    print(x.min(), x.max(), y.min(), y.max())
 
-    pd = PatchDataset(image_dir, label_dir)
-    x,y = pd[10]
+    cd2 = os.path.expanduser("~/Desktop/ABA/MouseBrainNissl/griddata/imgs/")
+    ld2 = os.path.expanduser("~/Desktop/ABA/MouseBrainNissl/griddata/lbls/")
+
+    pd2 = STPatchDataset(cd2, ld2, 128, 128)
+    print(len(pd2))
+    x,y = pd2[0]
     print(x.shape, y.shape)
+    print(x.min(), x.max(), y.min(), y.max())
 
-    #for x,y in dl:
-    #    print(x.shape, y.shape)
+    imgdir = os.path.expanduser("~/Desktop/aba_stdataset_20200212/imgs256/")
+    lbldir = os.path.expanduser("~/Desktop/aba_stdataset_20200212/lbls256/")
+
+    pd3 = PatchGridDataset(imgdir, lbldir)
+    print(len(pd3))
+    x,y = pd3[0]
+    print(x.shape, y.shape)
+    print(x.min(), x.max(), y.min(), y.max())
 

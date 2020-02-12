@@ -76,8 +76,8 @@ import matplotlib
 matplotlib.use('agg')
 from matplotlib import pyplot as plt
 
-from patch_classifier import PatchCNN
-from datasets import STPatchDataset
+from patch_classifier import patchcnn_simple, densenet121, densenet_preprocess
+from datasets import STPatchDataset, PatchGridDataset
 
 
 def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile=None):
@@ -181,6 +181,7 @@ def parse_args():
 	parser.add_argument('-b', '--batch-size', type=int, default=1, help='Batch size.')
 	parser.add_argument('-c', '--grad-checkpoints', type=int, default=0, help='Number of gradient checkpoints.')
 	parser.add_argument('-p', '--patch-classifier', type=str, default=None, help='Path to pre-trained patch classifier.')
+	parser.add_argument('-d', '--use-densenet', action="store_true", help='Use DenseNet121 architecture for patch classification.')
 	return parser.parse_args()
 
 if __name__ == "__main__":
@@ -193,7 +194,12 @@ if __name__ == "__main__":
 	CP = args.grad_checkpoints
 	PC_PATH = args.patch_classifier
 
-	grid_dataset = STPatchDataset(args.imgdir, args.lbldir, 128, 128)
+	#grid_dataset = STPatchDataset(args.imgdir, args.lbldir, 128, 128)
+	if args.use_densenet:
+		xf = densenet_preprocess()
+		grid_dataset = PatchGridDataset(args.imgdir, args.lbldir, xf)
+	else:
+		grid_dataset = PatchGridDataset(args.imgdir, args.lbldir)
 	n_test = int(0.2 * len(grid_dataset))
 	trainset, testset = random_split(grid_dataset, [len(grid_dataset)-n_test, n_test])
 
@@ -205,10 +211,10 @@ if __name__ == "__main__":
 	h_st, w_st, c, h_patch, w_patch = g.shape
 	fgd_classes = 13  
 	
-	cl = [16,32,64,128,256,128,64,8]
-	fl = [100,50]
-	pc = PatchCNN(patch_shape=(c, h_patch, w_patch), n_classes=fgd_classes, conv_layers=cl, fc_layers=fl, 
-		checkpoints=CP)
+	if args.use_densenet:
+		pc = densenet121(fgd_classes)
+	else:
+		pc = patchcnn_simple(h_patch, w_patch, c, fgd_classes, CP)
 	gnet = GridNet(pc, patch_shape=(c, h_patch, w_patch), grid_shape=(h_st, w_st), n_classes=fgd_classes)
 	#gnet.apply(init_weights)
 

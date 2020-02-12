@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint_sequential
-from torchvision import models
+
+from torchvision import models, transforms
 
 ''' Custom CNN architecture that achieves 70% test accuracy on ABA brain dataset
 '''
@@ -57,6 +58,13 @@ class PatchCNN(nn.Module):
 
 		return out
 
+def patchcnn_simple(h_patch, w_patch, c, n_classes, checkpoints):
+	cl = [16,32,64,128,256,128,64,8]
+	fl = [100,50]
+	pc = PatchCNN(patch_shape=(c, h_patch, w_patch), n_classes=n_classes, conv_layers=cl, fc_layers=fl, 
+		checkpoints=checkpoints)
+	return pc
+
 ''' Modified DenseNet with optional pretraining on ImageNet.
 	
 	Pre-trained models expect input to be transformed according to the following:
@@ -64,10 +72,18 @@ class PatchCNN(nn.Module):
 	- Loaded into range [0,1]
 	- Normalized using mean = [0.485, 0.456, 0.406] and std = [0.229, 0.224, 0.225]
 '''
-class DenseNet121(nn.Module):
-	def __init__(self, n_classes, pretrained=True):
-		self.dnet = models.densenet121(pretrained)
-		self.dnet.classifier = nn.Linear(1024, n_classes)
+def densenet121(n_classes, pretrained=False):
+	dnet = models.densenet121(pretrained)
+	dnet.classifier = nn.Linear(1024, n_classes)
+	return dnet
 
-	def forward(self, x):
-		return self.dnet(x)
+# Helper method - returns a preprocessing transform for input to DenseNet which can be supplied as an optional 
+#  argument to PatchDataset or PatchGridDataset.
+def densenet_preprocess():
+	preprocess = transforms.Compose([
+    	transforms.Resize(256),
+    	transforms.CenterCrop(224),
+    	transforms.ToTensor(),
+    	transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+	])
+	return preprocess 
