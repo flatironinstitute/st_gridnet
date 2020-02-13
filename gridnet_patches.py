@@ -203,8 +203,8 @@ if __name__ == "__main__":
 	n_test = int(0.2 * len(grid_dataset))
 	trainset, testset = random_split(grid_dataset, [len(grid_dataset)-n_test, n_test])
 
-	train_loader = DataLoader(trainset, batch_size=BATCH_SIZE, shuffle=False)
-	test_loader = DataLoader(testset, batch_size=BATCH_SIZE, shuffle=False)
+	train_loader = DataLoader(trainset, batch_size=BATCH_SIZE, shuffle=True)
+	test_loader = DataLoader(testset, batch_size=BATCH_SIZE, shuffle=True)
 	dataloaders = {"train": train_loader, "val": test_loader}
 
 	g, l = grid_dataset[0]
