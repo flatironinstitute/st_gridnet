@@ -125,6 +125,7 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs, outfile=No
             for inputs, labels in dataloaders[phase]:
                 inputs = inputs.to(device)
                 labels = labels.to(device)
+                labels -= 1	# Foreground classes range between [1, N_CLASS].
 
                 # zero the parameter gradients
                 optimizer.zero_grad()
