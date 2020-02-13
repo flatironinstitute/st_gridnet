@@ -179,6 +179,7 @@ def parse_args():
 	parser.add_argument('-n', '--epochs', type=int, default=5, help='Number of training epochs.')
 	parser.add_argument('-b', '--batch-size', type=int, default=1, help='Batch size.')
 	parser.add_argument('-d', '--use-densenet', action="store_true", help='Use DenseNet121 architecture for patch classification.')
+	parser.add_argument('-k', '--classes', type=int, default=2, help='Number of classes.')
 	return parser.parse_args()
 
 if __name__ == "__main__":
@@ -197,8 +198,7 @@ if __name__ == "__main__":
 
 	x,_ = trainset[0]
 	c, h_patch, w_patch = x.shape
-	# TODO: Have this supplied as an argument
-	n_classes = 13
+	n_classes = args.classes
 
 	if args.use_densenet:
 		model = densenet121(n_classes)

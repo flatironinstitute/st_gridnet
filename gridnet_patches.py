@@ -182,6 +182,7 @@ def parse_args():
 	parser.add_argument('-c', '--grad-checkpoints', type=int, default=0, help='Number of gradient checkpoints.')
 	parser.add_argument('-p', '--patch-classifier', type=str, default=None, help='Path to pre-trained patch classifier.')
 	parser.add_argument('-d', '--use-densenet', action="store_true", help='Use DenseNet121 architecture for patch classification.')
+	parser.add_argument('-k', '--classes', type=int, default=2, help='Number of classes.')
 	return parser.parse_args()
 
 if __name__ == "__main__":
@@ -194,6 +195,7 @@ if __name__ == "__main__":
 	CP = args.grad_checkpoints
 	PC_PATH = args.patch_classifier
 
+	# Old dataset formulation
 	#grid_dataset = STPatchDataset(args.imgdir, args.lbldir, 128, 128)
 	if args.use_densenet:
 		xf = densenet_preprocess()
@@ -209,7 +211,7 @@ if __name__ == "__main__":
 
 	g, l = grid_dataset[0]
 	h_st, w_st, c, h_patch, w_patch = g.shape
-	fgd_classes = 13  
+	fgd_classes = args.classes  
 	
 	if args.use_densenet:
 		pc = densenet121(fgd_classes)
