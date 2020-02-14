@@ -216,7 +216,7 @@ if __name__ == "__main__":
 	fgd_classes = args.classes  
 	
 	if args.use_densenet:
-		pc = densenet121(fgd_classes)
+		pc = densenet121(fgd_classes, pretrained=True, checkpoints=CP)
 	else:
 		pc = patchcnn_simple(h_patch, w_patch, c, fgd_classes, CP)
 	gnet = GridNet(pc, patch_shape=(c, h_patch, w_patch), grid_shape=(h_st, w_st), n_classes=fgd_classes)

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint_sequential
 
 from torchvision import models, transforms
@@ -72,10 +73,33 @@ def patchcnn_simple(h_patch, w_patch, c, n_classes, checkpoints=0):
 	- Loaded into range [0,1]
 	- Normalized using mean = [0.485, 0.456, 0.406] and std = [0.229, 0.224, 0.225]
 '''
-def densenet121(n_classes, pretrained=False):
-	dnet = models.densenet121(pretrained)
-	dnet.classifier = nn.Linear(1024, n_classes)
-	return dnet
+class DenseNet121(nn.Module):
+	def __init__(self, n_classes, pretrained=False, checkpoints=0):
+		super(DenseNet121, self).__init__()
+		self.n_classes = n_classes
+		self.checkpoints = checkpoints
+
+		self.dnet = models.densenet121(pretrained)
+		self.classifier = nn.Linear(1024, n_classes)
+
+	def forward(self, x):
+		if self.checkpoints == 0:
+			features = self.dnet.features(x)
+		else:
+			features = checkpoint_sequential(self.dnet.features, self.checkpoints, x)
+		out = F.relu(features, inplace=True)
+		out = F.adaptive_avg_pool2d(out, (1, 1))
+		out = torch.flatten(out, 1)
+		out = self.classifier(out)
+		return out
+
+#def densenet121(n_classes, pretrained=False):
+#	dnet = models.densenet121(pretrained)
+#	dnet.classifier = nn.Linear(1024, n_classes)
+#	return dnet
+
+def densenet121(n_classes, pretrained=False, checkpoints=0):
+	return DenseNet121(n_classes, pretrained, checkpoints)
 
 # Helper method - returns a preprocessing transform for input to DenseNet which can be supplied as an optional 
 #  argument to PatchDataset or PatchGridDataset.
@@ -181,6 +205,7 @@ def parse_args():
 	parser.add_argument('-b', '--batch-size', type=int, default=1, help='Batch size.')
 	parser.add_argument('-d', '--use-densenet', action="store_true", help='Use DenseNet121 architecture for patch classification.')
 	parser.add_argument('-k', '--classes', type=int, default=2, help='Number of classes.')
+	parser.add_argument('-c', '--gradient-checkpoints', type=int, default=0, help='Number of gradient checkpoints.')
 	return parser.parse_args()
 
 if __name__ == "__main__":
@@ -202,9 +227,9 @@ if __name__ == "__main__":
 	n_classes = args.classes
 
 	if args.use_densenet:
-		model = densenet121(n_classes)
+		model = densenet121(n_classes, pretrained=False, checkpoints=args.gradient_checkpoints)
 	else:
-		model = patchcnn_simple(h_patch, w_patch, c, n_classes)
+		model = patchcnn_simple(h_patch, w_patch, c, n_classes, checkpoints=args.gradient_checkpoints)
 
 	loss = nn.CrossEntropyLoss()
 	optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
