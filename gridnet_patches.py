@@ -80,7 +80,7 @@ from patch_classifier import patchcnn_simple, densenet121, densenet_preprocess
 from datasets import STPatchDataset, PatchGridDataset
 
 
-def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile=None):
+def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile=None, finetune=False):
     since = time.time()
 
     val_acc_history = []
@@ -102,9 +102,10 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile
                 model.train()  # Set model to training mode
             else:
                 model.eval()   # Set model to evaluate mode
-            # FOR NOW, treat patch classifier as if it's in eval mode. Not updating params, so don't need BN/dropout.
-            # If you simply set grad_enabled(False) for parameters, BN/dropout layers remain and make loss function behave strangely.
-            model.patch_classifier.eval()
+            # If not fine-tuning (parameters of patch classifier fixed before calling train), must turn off
+            #   batch normalization/dropout layers.
+            if not finetune:
+            	model.patch_classifier.eval()
 
             running_loss = 0.0
             running_corrects = 0
@@ -175,14 +176,15 @@ def parse_args():
 	parser = argparse.ArgumentParser(description="GridNet Tissue Segmentation")
 	parser.add_argument('imgdir', type=str, help="Path to directory containing training images.")
 	parser.add_argument('lbldir', type=str, help="Path to directory containing training labels.")
+	parser.add_argument('-k', '--classes', type=int, default=2, help='Number of classes.')
+	parser.add_argument('-b', '--batch-size', type=int, default=1, help='Batch size.')
+	parser.add_argument('-n', '--epochs', type=int, default=5, help='Number of training epochs.')
 	parser.add_argument('-a', '--accum-size', type=int, default=1, help='Perform optimizer step every "a" batches.')
 	parser.add_argument('-o', '--output-file', type=str, default=None, help='Path to file in which to save best model.')
-	parser.add_argument('-n', '--epochs', type=int, default=5, help='Number of training epochs.')
-	parser.add_argument('-b', '--batch-size', type=int, default=1, help='Batch size.')
 	parser.add_argument('-c', '--grad-checkpoints', type=int, default=0, help='Number of gradient checkpoints.')
 	parser.add_argument('-p', '--patch-classifier', type=str, default=None, help='Path to pre-trained patch classifier.')
 	parser.add_argument('-d', '--use-densenet', action="store_true", help='Use DenseNet121 architecture for patch classification.')
-	parser.add_argument('-k', '--classes', type=int, default=2, help='Number of classes.')
+	parser.add_argument('-f', '--finetune', action="store_true", help='Fine-tune parameters of patch classifier.')
 	return parser.parse_args()
 
 if __name__ == "__main__":
@@ -228,13 +230,15 @@ if __name__ == "__main__":
 			gnet.patch_classifier.load_state_dict(torch.load(PC_PATH, map_location=torch.device('cpu')))
 
 		# For now, fix parameters of patch classifier before training corrector network.
-		for param in gnet.patch_classifier.parameters():
-			param.requires_grad = False
+		if not args.finetune:
+			for param in gnet.patch_classifier.parameters():
+				param.requires_grad = False
 
 	criterion = nn.CrossEntropyLoss()
 	optimizer = optim.Adam(gnet.parameters(), lr=0.001)
 
-	gnet_fit, hist = train_model(gnet, dataloaders, criterion, optimizer, num_epochs=EPOCHS, outfile=OUT_FILE)
+	gnet_fit, hist = train_model(gnet, dataloaders, criterion, optimizer, 
+		num_epochs=EPOCHS, outfile=OUT_FILE, finetune=args.finetune)
 	gnet_fit.to("cpu")
 
 	# Visualize results from patch predictions, grid predictions on batches of train, test set
