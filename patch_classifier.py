@@ -5,6 +5,7 @@ from torch.utils.checkpoint import checkpoint_sequential
 
 from torchvision import models, transforms
 
+
 ''' Custom CNN architecture that achieves 70% test accuracy on ABA brain dataset
 '''
 class PatchCNN(nn.Module):
@@ -31,6 +32,11 @@ class PatchCNN(nn.Module):
 
 		self.cnn = nn.Sequential(*cnn_layers)
 
+		# Gradient Checkpointing breaks if all the inputs to a checkpointed layer have gradient turned off.
+		# Since we are applying checkpointing to inputs, we have to add a dummy variable with gradient on to fool the tape.
+		if checkpoints > 0:
+			self.dummy_tensor = torch.ones(1, dtype=torch.float32, requires_grad=True)
+
 		fcn_layers = []
 		latent_size = patch_shape[1]//(poolsize**n_pool) * patch_shape[2]//(poolsize**n_pool) * conv_layers[-1]
 		fcn_layers.append(nn.Linear(latent_size, fc_layers[0]))
@@ -52,6 +58,7 @@ class PatchCNN(nn.Module):
 		if self.checkpoints == 0:
 			out = self.cnn(x)
 		else:
+			x = x + self.dummy_tensor
 			out = checkpoint_sequential(self.cnn, self.checkpoints, x)
 
 		out = out.reshape(out.size(0), -1)
@@ -82,6 +89,11 @@ class DenseNet121(nn.Module):
 		self.dnet = models.densenet121(pretrained)
 		self.dnet.classifier = nn.Linear(1024, n_classes)
 
+		# Gradient Checkpointing breaks if all the inputs to a checkpointed layer have gradient turned off.
+		# Since we are applying checkpointing to inputs, we have to add a dummy variable with gradient on to fool the tape.
+		if checkpoints > 0:
+			self.dummy_tensor = torch.ones(1, dtype=torch.float32, requires_grad=True)
+
 	def load_state_dict(self, state_dict, strict=True):
 		return self.dnet.load_state_dict(state_dict, strict)
 
@@ -89,6 +101,7 @@ class DenseNet121(nn.Module):
 		if self.checkpoints == 0:
 			features = self.dnet.features(x)
 		else:
+			x = x + self.dummy_tensor
 			features = checkpoint_sequential(self.dnet.features, self.checkpoints, x)
 		out = F.relu(features, inplace=True)
 		out = F.adaptive_avg_pool2d(out, (1, 1))
