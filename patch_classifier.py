@@ -80,7 +80,10 @@ class DenseNet121(nn.Module):
 		self.checkpoints = checkpoints
 
 		self.dnet = models.densenet121(pretrained)
-		self.classifier = nn.Linear(1024, n_classes)
+		self.dnet.classifier = nn.Linear(1024, n_classes)
+
+	def load_state_dict(self, state_dict, strict=True):
+		return self.dnet.load_state_dict(state_dict, strict)
 
 	def forward(self, x):
 		if self.checkpoints == 0:
@@ -90,7 +93,7 @@ class DenseNet121(nn.Module):
 		out = F.relu(features, inplace=True)
 		out = F.adaptive_avg_pool2d(out, (1, 1))
 		out = torch.flatten(out, 1)
-		out = self.classifier(out)
+		out = self.dnet.classifier(out)
 		return out
 
 #def densenet121(n_classes, pretrained=False):
