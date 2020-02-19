@@ -148,17 +148,18 @@ import sys
 import argparse
 import torch.optim as optim
 
-from datasets import STCountDataset
+from datasets import STCountDataset, CountGridDataset
 from torch.utils.data import DataLoader
 
 def parse_args():
 	parser = argparse.ArgumentParser(description="Registration of ST spots to AAR framework based on counts of selected genes.")
 	parser.add_argument('countdir', type=str, help="Path to directory containing numpy archives of ST count matrices.")
 	parser.add_argument('labeldir', type=str, help="Path to directory containing numpy archives of ST grid labelings.")
-	parser.add_argument('metadata', type=str, help="Path to metadata file mapping count files to label files.")
-	parser.add_argument('hst', type=int, help="Height of ST array (number of spots).")
-	parser.add_argument('wst', type=int, help="Width of ST array (number of spots).")
-	parser.add_argument('nclass', type=int, help="Number of tissue classes (excluding background).")
+	#parser.add_argument('metadata', type=str, help="Path to metadata file mapping count files to label files.")
+	#parser.add_argument('hst', type=int, help="Height of ST array (number of spots).")
+	#parser.add_argument('wst', type=int, help="Width of ST array (number of spots).")
+	#parser.add_argument('nclass', type=int, help="Number of tissue classes (excluding background).")
+	parser.add_argument('-k', '--classes', type=int, default=2, help="Number of classes.")
 	parser.add_argument('-n', '--epochs', type=int, default=10, help="Number of training epochs.")
 	parser.add_argument('-b', '--batch-size', type=int, default=5, help="Size of training batches.")
 	parser.add_argument('-a', '--accum-size', type=int, default=1, help='Perform optimizer step every "a" batches.')
@@ -168,20 +169,21 @@ def parse_args():
 if __name__ == "__main__":
 	args = parse_args()
 
-	st_count_dataset = STCountDataset(args.countdir, args.labeldir, args.metadata, (args.hst, args.wst), 
-		normalize_spots=True)
+	#st_count_dataset = STCountDataset(args.countdir, args.labeldir, args.metadata, (args.hst, args.wst), normalize_spots=True)
+	st_count_dataset = CountGridDataset(args.countdir, args.labeldir, normalize_counts=True)
 
 	# Create train-test split, then declare DataLoaders, which handle batching.
 	n_val = int(0.2*len(st_count_dataset))
 	trainset, valset = torch.utils.data.random_split(st_count_dataset, [len(st_count_dataset)-n_val, n_val])
 	x,y = trainset[0]
-	G,_,_ = x.shape
+	G,h_st,w_st = x.shape
+	print(G, h_st, w_st)
 
 	train_loader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True)
 	val_loader = DataLoader(valset, batch_size=args.batch_size, shuffle=True)
 	data_loaders = {"train":train_loader, "val":val_loader}
 
-	model = CountGridNet(G, args.nclass+1)
+	model = CountGridNet(G, args.classes + 1)
 	criterion = nn.CrossEntropyLoss()
 	optimizer = optim.Adam(model.parameters(), lr=0.001)
 
