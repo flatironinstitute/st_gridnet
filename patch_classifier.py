@@ -5,6 +5,7 @@ from torch.utils.checkpoint import checkpoint_sequential
 
 from torchvision import models, transforms
 
+import copy
 
 ''' Custom CNN architecture that achieves 70% test accuracy on ABA brain dataset
 '''
@@ -94,8 +95,21 @@ class DenseNet121(nn.Module):
 		if checkpoints > 0:
 			self.dummy_tensor = torch.ones(1, dtype=torch.float32, requires_grad=True)
 
+	# Allows loading state dict of EITHER:
+	# - Model instatiated with this class.
+	# - Torchvision DenseNet model.
 	def load_state_dict(self, state_dict, strict=True):
-		return self.dnet.load_state_dict(state_dict, strict)
+		sd2 = copy.deepcopy(state_dict)
+		for key in state_dict:
+			# If parameters start like "dnet.features", state dict is from an instance of this class.
+			# For some reason, the modified classifier is saved directly as "classifier", while "dnet.classifier"
+			#  retains parameters for default 1000-state classification layer. Manually ignore the latter.
+			if 'dnet' in key:
+				if 'classifier' in key:
+					sd2.pop(key)
+				else:
+					sd2[key.split('dnet.')[1]] = sd2.pop(key)
+		return self.dnet.load_state_dict(sd2, strict)
 
 	def forward(self, x):
 		if self.checkpoints == 0:
