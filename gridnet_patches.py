@@ -7,7 +7,7 @@ import numpy as np
 
 
 class GridNet(nn.Module):
-	def __init__(self, patch_classifier, patch_shape, grid_shape, n_classes):
+	def __init__(self, patch_classifier, patch_shape, grid_shape, n_classes, use_bn=True):
 		super(GridNet, self).__init__()
 
 		self.patch_shape = patch_shape
@@ -18,13 +18,16 @@ class GridNet(nn.Module):
 		# Define Sequential model containing convolutional layers in global corrector.
 		cnn_layers = []
 		cnn_layers.append(nn.Conv2d(n_classes, n_classes, 3, padding=1))
-		cnn_layers.append(nn.BatchNorm2d(n_classes))
+		if use_bn:
+			cnn_layers.append(nn.BatchNorm2d(n_classes))
 		cnn_layers.append(nn.ReLU())
 		cnn_layers.append(nn.Conv2d(n_classes, n_classes, 5, padding=2))
-		cnn_layers.append(nn.BatchNorm2d(n_classes))
+		if use_bn:
+			cnn_layers.append(nn.BatchNorm2d(n_classes))
 		cnn_layers.append(nn.ReLU())
 		cnn_layers.append(nn.Conv2d(n_classes, n_classes, 5, padding=2))
-		cnn_layers.append(nn.BatchNorm2d(n_classes))
+		if use_bn:
+			cnn_layers.append(nn.BatchNorm2d(n_classes))
 		cnn_layers.append(nn.ReLU())
 		cnn_layers.append(nn.Conv2d(n_classes, n_classes, 3, padding=1))
 		self.corrector = nn.Sequential(*cnn_layers)
@@ -195,6 +198,7 @@ if __name__ == "__main__":
 	BATCH_SIZE = args.batch_size
 	CP = args.grad_checkpoints
 	PC_PATH = args.patch_classifier
+	USE_BN = (not args.finetune)
 
 	# Old dataset formulation
 	#grid_dataset = STPatchDataset(args.imgdir, args.lbldir, 128, 128)
@@ -218,7 +222,8 @@ if __name__ == "__main__":
 		pc = densenet121(fgd_classes, pretrained=True, checkpoints=CP)
 	else:
 		pc = patchcnn_simple(h_patch, w_patch, c, fgd_classes, CP)
-	gnet = GridNet(pc, patch_shape=(c, h_patch, w_patch), grid_shape=(h_st, w_st), n_classes=fgd_classes)
+	gnet = GridNet(pc, patch_shape=(c, h_patch, w_patch), grid_shape=(h_st, w_st), n_classes=fgd_classes,
+		use_bn=USE_BN)
 	#gnet.apply(init_weights)
 
 	# Load parameters of pre-trained patch classifier model, if provided.
