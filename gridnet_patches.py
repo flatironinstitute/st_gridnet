@@ -28,7 +28,6 @@ class GridNet(nn.Module):
 		cnn_layers.append(nn.ReLU())
 		cnn_layers.append(nn.Conv2d(n_classes, n_classes, 3, padding=1))
 		self.corrector = nn.Sequential(*cnn_layers)
-		#self.corrector = rns34(n_classes, n_classes)
 
 		# Define a constant vector to be returned by attempted classification of "background" patches
 		self.bg = torch.zeros((1,n_classes))
