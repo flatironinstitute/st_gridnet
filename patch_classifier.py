@@ -47,7 +47,6 @@ class PatchCNN(nn.Module):
 
 		# NOTE: nn.CrossEntropyLoss applies Softmax internally, so model should output raw logits.
 		# Recall that model output will need to be passed through softmax prior to input to CRF, etc.
-		# NOTE: This only solves breaking of gradient tape if network is trained end-to-end.
 		fcn_layers.append(nn.Linear(fc_layers[-1], n_classes))
 
 		self.fcn = nn.Sequential(*fcn_layers)
@@ -58,6 +57,7 @@ class PatchCNN(nn.Module):
 		else:
 			# Gradient checkpointing breaks unless at least one input has requires_grad=True.
 			# Thus, input must pass through at least one layer before CP (unless we develop a clevel hack).
+			# NOTE: This only solves breaking of gradient tape if network is trained end-to-end.
 			out = self.cnn[0](x)
 			out = checkpoint_sequential(self.cnn[1:], self.checkpoints, out)
 
