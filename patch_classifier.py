@@ -1,11 +1,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.checkpoint import checkpoint_sequential
+from torch.utils.checkpoint import checkpoint, checkpoint_sequential
 
 from torchvision import models, transforms
 
 import copy
+
 
 ''' Custom CNN architecture that achieves 70% test accuracy on ABA brain dataset
 '''
@@ -33,11 +34,6 @@ class PatchCNN(nn.Module):
 
 		self.cnn = nn.Sequential(*cnn_layers)
 
-		# Gradient Checkpointing breaks if all the inputs to a checkpointed layer have gradient turned off.
-		# Since we are applying checkpointing to inputs, we have to add a dummy variable with gradient on to fool the tape.
-		if checkpoints > 0:
-			self.dummy_tensor = torch.ones(1, dtype=torch.float32, requires_grad=True)
-
 		fcn_layers = []
 		latent_size = patch_shape[1]//(poolsize**n_pool) * patch_shape[2]//(poolsize**n_pool) * conv_layers[-1]
 		fcn_layers.append(nn.Linear(latent_size, fc_layers[0]))
@@ -51,6 +47,7 @@ class PatchCNN(nn.Module):
 
 		# NOTE: nn.CrossEntropyLoss applies Softmax internally, so model should output raw logits.
 		# Recall that model output will need to be passed through softmax prior to input to CRF, etc.
+		# NOTE: This only solves breaking of gradient tape if network is trained end-to-end.
 		fcn_layers.append(nn.Linear(fc_layers[-1], n_classes))
 
 		self.fcn = nn.Sequential(*fcn_layers)
@@ -59,8 +56,10 @@ class PatchCNN(nn.Module):
 		if self.checkpoints == 0:
 			out = self.cnn(x)
 		else:
-			x = x + self.dummy_tensor
-			out = checkpoint_sequential(self.cnn, self.checkpoints, x)
+			# Gradient checkpointing breaks unless at least one input has requires_grad=True.
+			# Thus, input must pass through at least one layer before CP (unless we develop a clevel hack).
+			out = self.cnn[0](x)
+			out = checkpoint_sequential(self.cnn[1:], self.checkpoints, out)
 
 		out = out.reshape(out.size(0), -1)
 		out = self.fcn(out)
@@ -90,11 +89,6 @@ class DenseNet121(nn.Module):
 		self.dnet = models.densenet121(pretrained)
 		self.dnet.classifier = nn.Linear(1024, n_classes)
 
-		# Gradient Checkpointing breaks if all the inputs to a checkpointed layer have gradient turned off.
-		# Since we are applying checkpointing to inputs, we have to add a dummy variable with gradient on to fool the tape.
-		if checkpoints > 0:
-			self.dummy_tensor = torch.ones(1, dtype=torch.float32, requires_grad=True)
-
 	# Allows loading state dict of EITHER:
 	# - Model instatiated with this class.
 	# - Torchvision DenseNet model.
@@ -109,18 +103,24 @@ class DenseNet121(nn.Module):
 					sd2.pop(key)
 				else:
 					sd2[key.split('dnet.')[1]] = sd2.pop(key)
+
 		return self.dnet.load_state_dict(sd2, strict)
 
 	def forward(self, x):
 		if self.checkpoints == 0:
 			features = self.dnet.features(x)
 		else:
-			x = x + self.dummy_tensor
-			features = checkpoint_sequential(self.dnet.features, self.checkpoints, x)
+			# Gradient checkpointing breaks unless at least one input has requires_grad=True.
+			# Thus, input must pass through at least one layer before CP (unless we develop a clever hack).
+			# NOTE: This only solves breaking of gradient tape if network is trained end-to-end.
+			features = self.dnet.features[0](x)
+			features = checkpoint_sequential(self.dnet.features[1:], self.checkpoints, features)
+
 		out = F.relu(features, inplace=True)
 		out = F.adaptive_avg_pool2d(out, (1, 1))
 		out = torch.flatten(out, 1)
 		out = self.dnet.classifier(out)
+
 		return out
 
 #def densenet121(n_classes, pretrained=False):
