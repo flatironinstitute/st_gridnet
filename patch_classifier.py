@@ -236,14 +236,29 @@ def parse_args():
 	parser.add_argument('-d', '--use-densenet', action="store_true", help='Use DenseNet121 architecture for patch classification.')
 	parser.add_argument('-k', '--classes', type=int, default=2, help='Number of classes.')
 	parser.add_argument('-c', '--gradient-checkpoints', type=int, default=0, help='Number of gradient checkpoints.')
+	parser.add_argument('-A', '--augment-data', action="store_true", help="Use data augmentation (rotation + reflection).")
 	return parser.parse_args()
 
 if __name__ == "__main__":
 	args = parse_args()
 
 	xf = None
+	
 	if args.use_densenet:
 		xf = densenet_preprocess()
+	
+	if args.augment_data:
+		data_aug = transforms.Compose([
+			transforms.RandomRotation(30),
+			transforms.RandomVerticalFlip(),
+			transforms.RandomHorizontalFlip()
+		])
+
+		if xf is not None:
+			xf = transforms.Compose([xf, transforms.ToPILImage(), data_aug])
+		else:
+			xf = data_aug
+
 	ds = PatchDataset(args.imgdir, args.lbldir, xf)
 	n_test = int(0.2 * len(ds))
 	trainset, testset = random_split(ds, [len(ds)-n_test, n_test])

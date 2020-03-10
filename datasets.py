@@ -51,9 +51,10 @@ class PatchDataset(Dataset):
                     x, y = int(res.groups()[0]), int(res.groups()[1])
                     self.coord_list.append([os.path.basename(root), x, y])
 
-        self.preprocess = transforms
         if transforms is None:
             self.preprocess = Compose([ToTensor()])
+        else:
+            self.preprocess = Compose([transforms, ToTensor()])
 
     def __len__(self):
         return len(self.patch_list)
