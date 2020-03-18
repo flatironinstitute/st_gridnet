@@ -82,7 +82,7 @@ from patch_classifier import patchcnn_simple, densenet121, densenet_preprocess
 from datasets import STPatchDataset, PatchGridDataset
 
 
-def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile=None, finetune=False):
+def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile=None, finetune=False, accum_iters=1):
     since = time.time()
 
     val_acc_history = []
@@ -104,11 +104,13 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile
                 model.train()  # Set model to training mode
             else:
                 model.eval()   # Set model to evaluate mode
-            # If not fine-tuning (parameters of patch classifier fixed before calling train), must turn off
-            #   batch normalization/dropout layers.
-            if not finetune:
-            	model.patch_classifier.eval()
 
+            # Turn off batch normalization/dropout for patch classifier, but allow parameters to vary if finetuning
+            model.patch_classifier.eval()
+            if finetune and phase=='train':
+                for param in model.patch_classifier.parameters():
+                    param.requires_grad = True
+            
             running_loss = 0.0
             running_corrects = 0
             running_foreground = 0
@@ -117,9 +119,6 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile
             for batch_ind, (inputs, labels) in enumerate(dataloaders[phase]):
                 inputs = inputs.to(device)
                 labels = labels.to(device)
-
-                # zero the parameter gradients
-                optimizer.zero_grad()
 
                 # forward
                 # track history if only in train
@@ -134,13 +133,16 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile
                     labels = labels[labels > 0]
                     labels -= 1	# Foreground classes range between [1, N_CLASS].
 
-                    loss = criterion(outputs, labels)
+                    loss = criterion(outputs, labels) / accum_iters
                     _, preds = torch.max(outputs, 1)
 
                     # backward + optimize only if in training phase
                     if phase == 'train':
                         loss.backward()
-                        optimizer.step()
+                        
+                        if batch_ind % accum_iters == 0:
+                            optimizer.step()
+                            optimizer.zero_grad()
 
                 # statistics
                 running_loss += loss.item() * inputs.size(0)
@@ -160,7 +162,7 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile
                 best_model_wts = copy.deepcopy(model.state_dict())
 
                 if outfile is not None:
-                	torch.save(model.state_dict(), outfile)
+                    torch.save(model.state_dict(), outfile)
             if phase == 'val':
                 val_acc_history.append(epoch_acc)
 
@@ -181,7 +183,7 @@ def parse_args():
 	parser.add_argument('-k', '--classes', type=int, default=2, help='Number of classes.')
 	parser.add_argument('-b', '--batch-size', type=int, default=1, help='Batch size.')
 	parser.add_argument('-n', '--epochs', type=int, default=5, help='Number of training epochs.')
-	parser.add_argument('-a', '--accum-size', type=int, default=1, help='Perform optimizer step every "a" batches.')
+	parser.add_argument('-a', '--accum-iters', type=int, default=1, help='Perform optimizer step every "a" batches.')
 	parser.add_argument('-o', '--output-file', type=str, default=None, help='Path to file in which to save best model.')
 	parser.add_argument('-c', '--grad-checkpoints', type=int, default=0, help='Number of gradient checkpoints.')
 	parser.add_argument('-p', '--patch-classifier', type=str, default=None, help='Path to pre-trained patch classifier.')
@@ -192,7 +194,7 @@ def parse_args():
 if __name__ == "__main__":
 	args = parse_args()
 
-	ACCUM_SIZE = args.accum_size
+	ACCUM_ITERS = args.accum_iters
 	OUT_FILE = args.output_file
 	EPOCHS = args.epochs
 	BATCH_SIZE = args.batch_size
@@ -229,8 +231,10 @@ if __name__ == "__main__":
 	# Load parameters of pre-trained patch classifier model, if provided.
 	if PC_PATH is not None:
 		if torch.cuda.is_available():
+			print("CUDA available", flush=True)
 			gnet.patch_classifier.load_state_dict(torch.load(PC_PATH))
 		else:
+			print("Fitting on CPU", flush=True)
 			gnet.patch_classifier.load_state_dict(torch.load(PC_PATH, map_location=torch.device('cpu')))
 
 		# For now, fix parameters of patch classifier before training corrector network.
@@ -242,7 +246,7 @@ if __name__ == "__main__":
 	optimizer = optim.Adam(gnet.parameters(), lr=0.001)
 
 	gnet_fit, hist = train_model(gnet, dataloaders, criterion, optimizer, 
-		num_epochs=EPOCHS, outfile=OUT_FILE, finetune=args.finetune)
+		num_epochs=EPOCHS, outfile=OUT_FILE, finetune=args.finetune, accum_iters=ACCUM_ITERS)
 	gnet_fit.to("cpu")
 
 	# Visualize results from patch predictions, grid predictions on batches of train, test set
