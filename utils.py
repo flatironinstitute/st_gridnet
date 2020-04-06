@@ -74,9 +74,20 @@ def plot_confusion_matrix(y_true, y_pred, class_names, density):
 
 	return fig
 
-def macro_average_auc(dataloader, model):
-	return
+def cmat_auroc(dataloader, model, name, class_labels=None):
+	true, pred, smax = all_fgd_predictions(dataloader, model)
 
+	cmat_counts = plot_confusion_matrix(true, pred, class_labels, density=False)
+	plt.savefig(name+"_cmat_counts.png", format="PNG")
+
+	cmat_freq = plot_confusion_matrix(true, pred, class_labels, density=True)
+	plt.savefig(name+"_cmat_freq.png", format="PNG")
+
+	# Note: this will fail with the following error if not all classes are represented in "true":
+	# > ValueError: Number of classes in y_true not equal to the number of columns in 'y_score'
+	auroc = roc_auc_score(true, smax, average="macro", multi_class="ovr")
+
+	return cmat_counts, cmat_freq, auroc
 
 import os
 import torch
@@ -107,15 +118,7 @@ if __name__ == "__main__":
 		map_location=torch.device('cpu')))
 	gnet.eval()
 
-	true, pred, smax = all_fgd_predictions(dl, gnet)
-	fig = plot_confusion_matrix(true, pred, class_labels, density=False)
-	plt.savefig("cmat_counts.png", format="PNG")
-	fig = plot_confusion_matrix(true, pred, class_labels, density=True)
-	plt.savefig("cmat_freq.png", format="PNG")
-
-	# Note: this will fail with the following error if not all classes are represented in "true":
-	# ValueError: Number of classes in y_true not equal to the number of columns in 'y_score'
-	roc = roc_auc_score(true, smax, average="macro", multi_class="ovr")
-	print(roc)
+	cmat_counts, cmat_freq, auroc = cmat_auroc(dl, gnet, "aba128_gnsimple_test", class_labels)
+	print(auroc)
 
 
