@@ -38,7 +38,7 @@ class PatchDataset(Dataset):
         rxp = re.compile("(\d+)_(\d+).jpg")
 
         # Look at each sub-directory, which each indicate a separate slide.
-        dir_iter = os.walk(img_dir)
+        dir_iter = os.walk(img_dir, followlinks=True)
         top = next(dir_iter)
         for root, _, files in dir_iter:
 
