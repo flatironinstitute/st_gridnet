@@ -1,17 +1,26 @@
 import numpy as np
-from sklearn.metrics import confusion_matrix, roc_auc_score
 
 import torch.nn.functional as F
 
 import matplotlib
 from matplotlib import pyplot as plt
 
+from sklearn.preprocessing import label_binarize
+from sklearn.metrics import confusion_matrix, roc_curve, auc, roc_auc_score
+
 # For each batch in dataloader, calculates model prediction.
 # Returns a flattened, foreground-masked (true label > 0) list of spot predictions.
 def all_fgd_predictions(dataloader, model):
 	true_vals, pred_vals, pred_smax = [], [], []
 
+	# GPU support
+	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+	model.to(device)
+
 	for x,y in dataloader:
+		x = x.to(device)
+		y = y.to(device)
+
 		with torch.no_grad():		
 			outputs = model(x)
 			outputs = outputs.permute((0,2,3,1))
@@ -20,6 +29,8 @@ def all_fgd_predictions(dataloader, model):
 			outputs = outputs[labels > 0]
 			labels = labels[labels > 0] - 1 # Once background elimintated, re-scale between [0,N]
 
+			outputs = outputs.cpu()
+			labels = labels.cpu()
 			y_fgd_true = labels.data.numpy()
 			y_fgd_pred = torch.argmax(outputs, axis=1).data.numpy()
 			y_fgd_smax = F.softmax(outputs, dim=1).data.numpy()
@@ -74,6 +85,22 @@ def plot_confusion_matrix(y_true, y_pred, class_names, density):
 
 	return fig
 
+# Given a list of softmax predictions and corresponding "true" labels, outputs
+#   the per-class AUROC as a numpy vector. 
+# Macro Average AURUC can be computed as simple mean.
+def class_auroc(smax, true):
+	n_classes = smax.shape[1]
+	auroc = np.zeros(n_classes)
+	
+	true_onehot = label_binarize(true, classes=list(range(n_classes)))
+
+	for i in range(n_classes):
+		fpr, tpr, _ = roc_curve(true_onehot[:,i], smax[:,i])
+		auroc[i] = auc(fpr, tpr)
+
+	return auroc
+
+# Creates and saves plots of confusion matrices, and returns per-class AUROC.
 def cmat_auroc(dataloader, model, name, class_labels=None):
 	true, pred, smax = all_fgd_predictions(dataloader, model)
 
@@ -82,12 +109,12 @@ def cmat_auroc(dataloader, model, name, class_labels=None):
 
 	cmat_freq = plot_confusion_matrix(true, pred, class_labels, density=True)
 	plt.savefig(name+"_cmat_freq.png", format="PNG")
-
-	# Note: this will fail with the following error if not all classes are represented in "true":
-	# > ValueError: Number of classes in y_true not equal to the number of columns in 'y_score'
-	auroc = roc_auc_score(true, smax, average="macro", multi_class="ovr")
+	
+	# Calculate per-class AUROC
+	auroc = class_auroc(smax, true)
 
 	return cmat_counts, cmat_freq, auroc
+
 
 import os
 import torch
