@@ -5,7 +5,6 @@ from torch.utils.data import DataLoader, random_split
 
 import numpy as np
 
-
 class GridNet(nn.Module):
 	def __init__(self, patch_classifier, patch_shape, grid_shape, n_classes, use_bn=True):
 		super(GridNet, self).__init__()
@@ -149,7 +148,6 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile
                 running_corrects += torch.sum(preds == labels.data)
                 running_foreground += len(labels)
 
-                #print("[%d] %.4f - %d" % (batch_ind, loss.item(), len(labels)), flush=True)
 
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
             epoch_acc = running_corrects.double() / running_foreground
