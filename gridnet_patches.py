@@ -5,6 +5,8 @@ from torch.utils.data import DataLoader, random_split
 
 import numpy as np
 
+from utils import class_auroc
+
 
 class GridNet(nn.Module):
 	def __init__(self, patch_classifier, patch_shape, grid_shape, n_classes, use_bn=True):
@@ -120,6 +122,9 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile
                 inputs = inputs.to(device)
                 labels = labels.to(device)
 
+                # 05/04/2020 -- for computation of AUROC during training.
+                epoch_labels, epoch_softmax = [],[]
+
                 # forward
                 # track history if only in train
                 with torch.set_grad_enabled(phase == 'train'):
@@ -135,6 +140,10 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile
 
                     loss = criterion(outputs, labels) / accum_iters
                     _, preds = torch.max(outputs, 1)
+
+                    # 05/04/2020 -- for computation of AUROC during training.
+                    epoch_labels.append(labels)
+                    epoch_softmax.append(nn.functional.softmax(outputs, dim=1))
 
                     # backward + optimize only if in training phase
                     if phase == 'train':
@@ -156,11 +165,16 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile
 
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc), flush=True)
 
+            # 05/04/2020 -- for computation of AUROC during training.
+            epoch_labels = np.concatenate([x.cpu().data.numpy() for x in epoch_labels])
+            epoch_softmax = np.concatenate([x.cpu().data.numpy() for x in epoch_softmax])
+            auroc = class_auroc(epoch_softmax, epoch_labels)
+            print('{} AUROC: {}'.format(phase, "\t".join(list(map(str, auroc)))))
+
             # deep copy the model
             if phase == 'val' and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 best_model_wts = copy.deepcopy(model.state_dict())
-
                 if outfile is not None:
                     torch.save(model.state_dict(), outfile)
             if phase == 'val':
