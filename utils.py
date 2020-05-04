@@ -1,5 +1,6 @@
 import numpy as np
 
+import torch
 import torch.nn.functional as F
 
 import matplotlib
@@ -114,38 +115,5 @@ def cmat_auroc(dataloader, model, name, class_labels=None):
 	auroc = class_auroc(smax, true)
 
 	return cmat_counts, cmat_freq, auroc
-
-
-import os
-import torch
-
-from datasets import PatchGridDataset
-from gridnet_patches import GridNet
-from patch_classifier import patchcnn_simple
-from torch.utils.data import DataLoader, random_split
-
-if __name__ == "__main__":
-	imgdir = os.path.expanduser("~/Desktop/aba_stdataset_20200212/imgs128/")
-	lbldir = os.path.expanduser("~/Desktop/aba_stdataset_20200212/lbls128/")
-	dataset = PatchGridDataset(imgdir, lbldir)
-
-	class_labels = ["Midbrain", "Isocortex", "Medulla", "Striatum", 
-	"Cerebellar nuclei", "Cerebellar cortex", "Thalamus", "Olfactory areas", 
-	"Cortical subplate", "Pons", "Pallidum", "Hippocampal formation", "Hypothalamus"]
-
-	# Small test set (5 grids) to debug confusion matrix calculation
-	testset, _ = random_split(dataset, [5, len(dataset)-5])
-
-	#dl = DataLoader(dataset, batch_size=2)
-	dl = DataLoader(testset, batch_size=1)
-
-	pc = patchcnn_simple(128, 128, 3, 13)
-	gnet = GridNet(pc, patch_shape=(3, 128, 128), grid_shape=(32, 49), n_classes=13)
-	gnet.load_state_dict(torch.load("trained_models/gnet_simple_aba128.pth", 
-		map_location=torch.device('cpu')))
-	gnet.eval()
-
-	cmat_counts, cmat_freq, auroc = cmat_auroc(dl, gnet, "aba128_gnsimple_test", class_labels)
-	print(auroc)
 
 
