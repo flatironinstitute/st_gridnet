@@ -117,13 +117,13 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile
             running_corrects = 0
             running_foreground = 0
 
+            # 05/04/2020 -- for computation of AUROC during training.
+            epoch_labels, epoch_softmax = [],[]
+
             # Iterate over data.
             for batch_ind, (inputs, labels) in enumerate(dataloaders[phase]):
                 inputs = inputs.to(device)
                 labels = labels.to(device)
-
-                # 05/04/2020 -- for computation of AUROC during training.
-                epoch_labels, epoch_softmax = [],[]
 
                 # forward
                 # track history if only in train
