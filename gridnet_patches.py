@@ -84,7 +84,9 @@ from patch_classifier import patchcnn_simple, densenet121, densenet_preprocess
 from datasets import STPatchDataset, PatchGridDataset
 
 
-def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile=None, finetune=False, accum_iters=1):
+def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile=None, 
+	f_opt=None,
+	finetune=False, accum_iters=1):
     since = time.time()
 
     val_acc_history = []
@@ -152,6 +154,9 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile
                         if batch_ind % accum_iters == 0:
                             optimizer.step()
                             optimizer.zero_grad()
+                            if f_opt is not None:
+                            	f_opt.step()
+                            	f_opt.zero_grad()
 
                 # statistics
                 running_loss += loss.item() * inputs.size(0)
@@ -176,6 +181,13 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile
                 best_model_wts = copy.deepcopy(model.state_dict())
                 if outfile is not None:
                     torch.save(model.state_dict(), outfile)
+                    if f_opt is not None:
+                    	torch.save({
+                    		'g_opt':optimizer.state_dict(),
+                    		'f_opt':f_opt.state_dict()
+                    	}, os.path.splitext(outfile)[0]+".opt")
+                    else:
+                    	torch.save(optimizer.state_dict(), os.path.splitext(outfile)[0]+".opt")
             if phase == 'val':
                 val_acc_history.append(epoch_acc)
 
