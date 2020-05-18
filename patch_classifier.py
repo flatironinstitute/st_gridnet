@@ -95,14 +95,15 @@ class DenseNet121(nn.Module):
 	def load_state_dict(self, state_dict, strict=True):
 		sd2 = copy.deepcopy(state_dict)
 		for key in state_dict:
-			# If parameters start like "dnet.features", state dict is from an instance of this class.
-			# For some reason, the modified classifier is saved directly as "classifier", while "dnet.classifier"
-			#  retains parameters for default 1000-state classification layer. Manually ignore the latter.
 			if 'dnet' in key:
-				if 'classifier' in key:
-					sd2.pop(key)
-				else:
-					sd2[key.split('dnet.')[1]] = sd2.pop(key)
+				# For some reason, this used to be necessary -- perhaps previous implementations
+				#   maintained separate parameters for "dnet.classifier" and "classifier" due to 
+				#   how I formerly initiated modified DenseNets.
+				#if 'classifier' in key:
+				#	sd2.pop(key)
+				#else:
+				#	sd2[key.split('dnet.')[1]] = sd2.pop(key)
+				sd2[key.split('dnet.')[1]] = sd2.pop(key)
 
 		return self.dnet.load_state_dict(sd2, strict)
 
