@@ -7,6 +7,8 @@ import numpy as np
 
 from utils import class_auroc
 
+# Support for convolutions over hexagonally packed grids
+import hexagdly
 
 class GridNet(nn.Module):
 	def __init__(self, patch_classifier, patch_shape, grid_shape, n_classes, use_bn=True):
@@ -16,27 +18,31 @@ class GridNet(nn.Module):
 		self.grid_shape = grid_shape
 		self.n_classes = n_classes
 		self.patch_classifier = patch_classifier
+		self.use_bn = use_bn
 
-		# Define Sequential model containing convolutional layers in global corrector.
-		cnn_layers = []
-		cnn_layers.append(nn.Conv2d(n_classes, n_classes, 3, padding=1))
-		if use_bn:
-			cnn_layers.append(nn.BatchNorm2d(n_classes))
-		cnn_layers.append(nn.ReLU())
-		cnn_layers.append(nn.Conv2d(n_classes, n_classes, 5, padding=2))
-		if use_bn:
-			cnn_layers.append(nn.BatchNorm2d(n_classes))
-		cnn_layers.append(nn.ReLU())
-		cnn_layers.append(nn.Conv2d(n_classes, n_classes, 5, padding=2))
-		if use_bn:
-			cnn_layers.append(nn.BatchNorm2d(n_classes))
-		cnn_layers.append(nn.ReLU())
-		cnn_layers.append(nn.Conv2d(n_classes, n_classes, 3, padding=1))
-		self.corrector = nn.Sequential(*cnn_layers)
+		self.corrector = self._init_corrector()
 
 		# Define a constant vector to be returned by attempted classification of "background" patches
 		self.bg = torch.zeros((1,n_classes))
 		self.register_buffer("bg_const", self.bg) # Required for proper device handling with CUDA.
+
+	# Define Sequential model containing convolutional layers in global corrector.
+	def _init_corrector(self):
+		cnn_layers = []
+		cnn_layers.append(nn.Conv2d(self.n_classes, self.n_classes, 3, padding=1))
+		if self.use_bn:
+			cnn_layers.append(nn.BatchNorm2d(self.n_classes))
+		cnn_layers.append(nn.ReLU())
+		cnn_layers.append(nn.Conv2d(self.n_classes, self.n_classes, 5, padding=2))
+		if self.use_bn:
+			cnn_layers.append(nn.BatchNorm2d(self.n_classes))
+		cnn_layers.append(nn.ReLU())
+		cnn_layers.append(nn.Conv2d(self.n_classes, self.n_classes, 5, padding=2))
+		if self.use_bn:
+			cnn_layers.append(nn.BatchNorm2d(self.n_classes))
+		cnn_layers.append(nn.ReLU())
+		cnn_layers.append(nn.Conv2d(self.n_classes, self.n_classes, 3, padding=1))
+		return nn.Sequential(*cnn_layers)
 
 	# Wrapper function that calls patch classifier on foreground patches and returns constant values for background.
 	def foreground_classifier(self, x):
@@ -63,6 +69,35 @@ class GridNet(nn.Module):
 		corrected_grid = self.corrector(patch_pred_grid)
 		
 		return corrected_grid
+
+# Extension of GridNet that performs convolution over hexagonally-packed grids.
+# Expects input to employ the addressing scheme employed by HexagDLy.
+class GridNetHex(GridNet):
+	def __init__(self, patch_classifier, patch_shape, grid_shape, n_classes, use_bn=True):
+		super(GridNetHex, self).__init__(patch_classifier, patch_shape, grid_shape, n_classes, use_bn)
+
+	# Note: hexagdly.Conv2d seems to provide same-padding when stride=1.
+	def _init_corrector(self):
+		cnn_layers = []
+		cnn_layers.append(hexagdly.Conv2d(in_channels=self.n_classes, out_channels=self.n_classes, 
+			kernel_size=3, stride=1, bias=True))
+		if self.use_bn:
+			cnn_layers.append(nn.BatchNorm2d(self.n_classes))
+		cnn_layers.append(nn.ReLU())
+		cnn_layers.append(hexagdly.Conv2d(in_channels=self.n_classes, out_channels=self.n_classes, 
+			kernel_size=5, stride=1, bias=True))
+		if self.use_bn:
+			cnn_layers.append(nn.BatchNorm2d(self.n_classes))
+		cnn_layers.append(nn.ReLU())
+		cnn_layers.append(hexagdly.Conv2d(in_channels=self.n_classes, out_channels=self.n_classes, 
+			kernel_size=5, stride=1, bias=True))
+		if self.use_bn:
+			cnn_layers.append(nn.BatchNorm2d(self.n_classes))
+		cnn_layers.append(nn.ReLU())
+		cnn_layers.append(hexagdly.Conv2d(in_channels=self.n_classes, out_channels=self.n_classes, 
+			kernel_size=3, stride=1, bias=True))
+		return nn.Sequential(*cnn_layers)
+
 
 def init_weights(m):
     if type(m) == nn.Conv2d or type(m) == nn.Linear:
