@@ -76,7 +76,8 @@ class PatchGridDataset(Dataset):
 
         self.grid_list = []
 
-        for f in os.listdir(label_dir):
+        # Sort files so access index corresponds to alphanumeric ordering.
+        for f in sorted(os.listdir(label_dir)):
             if f.endswith(".png"):
                 s = f.split(".")[0]
                 if s in os.listdir(img_dir):
@@ -184,6 +185,30 @@ class CountGridDataset(Dataset):
                 count_mat[:, int(c[1]), int(c[0])] = c[2:] / d
 
         return torch.from_numpy(count_mat).float(), torch.from_numpy(label_mat).long()
+
+
+############################# HELPER FUNCTIONS ################################
+
+# Takes a directory of patch images (formatted as xcoord_ycoord.png) and 
+#   stitches them into a single image.
+def stitch_patch_grid(patch_dir, w_st, h_st):
+    img_array = None
+
+    rxp = re.compile("(\d+)_(\d+).jpg")
+    for f in os.listdir(patch_dir):
+        res = rxp.match(f)
+        if res is not None:
+            x, y = int(res.groups()[0]), int(res.groups()[1])
+
+            patch = np.array(Image.open(os.path.join(patch_dir, f)))
+
+            if img_array is None:
+                h,w,c = patch.shape
+                img_array = np.zeros((h*h_st, w*w_st, c))
+
+            img_array[h*y:h*(y+1),w*x:w*(x+1),:] = patch
+
+    return img_array.astype(np.uint8)
 
 
 ################################ DEPRECATED ###################################
@@ -320,10 +345,10 @@ from matplotlib import pyplot as plt
 
 if __name__ == "__main__":
     count_dir = os.path.expanduser("~/Dropbox (Simons Foundation)/mouse_sc_stdataset_20200207/counts_fgd/")
-    label_dir = os.path.expanduser("~/Dropbox (Simons Foundation)/mouse_sc_stdataset_20200207/labels/")
-    image_dir = os.path.expanduser("~/Dropbox (Simons Foundation)/mouse_sc_stdataset_20200207/imgs/")
+    label_dir = os.path.expanduser("~/Dropbox (Simons Foundation)/mouse_sc_stdataset_20200207/labels128/")
+    image_dir = os.path.expanduser("~/Dropbox (Simons Foundation)/mouse_sc_stdataset_20200207/imgs128/")
 
-    cd = CountDataset(count_dir, label_dir, normalize_counts=True)
+    '''cd = CountDataset(count_dir, label_dir, normalize_counts=True)
     print(len(cd))
     x,y = cd[0]
     print(x.shape, y.shape)
@@ -341,22 +366,12 @@ if __name__ == "__main__":
     print(x.shape, y.shape)
     print(x.min(), x.max(), y)
 
-    '''
-    cd2 = os.path.expanduser("~/Desktop/ABA/MouseBrainNissl/griddata/imgs/")
-    ld2 = os.path.expanduser("~/Desktop/ABA/MouseBrainNissl/griddata/lbls/")
-
-    pd2 = STPatchDataset(cd2, ld2, 128, 128)
-    print(len(pd2))
-    x,y = pd2[0]
-    print(x.shape, y.shape)
-    print(x.min(), x.max(), y.min(), y.max())
-
-    imgdir = os.path.expanduser("~/Desktop/aba_stdataset_20200212/imgs256/")
-    lbldir = os.path.expanduser("~/Desktop/aba_stdataset_20200212/lbls256/")
-
-    pd3 = PatchGridDataset(imgdir, lbldir)
-    print(len(pd3))
-    x,y = pd3[0]
+    pd = PatchGridDataset(image_dir, label_dir)
+    print(len(pd))
+    x,y = pd[0]
     print(x.shape, y.shape)
     print(x.min(), x.max(), y.min(), y.max())'''
+
+    img = stitch_patch_grid(os.path.join(image_dir, "L7CN30_D2"), 33, 35)
+    Image.fromarray(img).save("stitch_test.jpg", format="JPEG")
 
