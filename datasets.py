@@ -54,7 +54,7 @@ class PatchDataset(Dataset):
         if transforms is None:
             self.preprocess = Compose([ToTensor()])
         else:
-            self.preprocess = Compose([transforms, ToTensor()])
+            self.preprocess = transforms
 
     def __len__(self):
         return len(self.patch_list)

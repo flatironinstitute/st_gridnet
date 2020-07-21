@@ -256,7 +256,7 @@ if __name__ == "__main__":
 		])
 
 		if xf is not None:
-			xf = transforms.Compose([xf, transforms.ToPILImage(), data_aug])
+			xf = transforms.Compose([data_aug, xf])
 		else:
 			xf = data_aug
 
