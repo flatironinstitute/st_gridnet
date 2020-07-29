@@ -7,11 +7,15 @@ import numpy as np
 
 from utils import class_auroc
 
+# import the checkpoint API 
+import torch.utils.checkpoint as cp
+
 # Support for convolutions over hexagonally packed grids
 import hexagdly
 
 class GridNet(nn.Module):
-	def __init__(self, patch_classifier, patch_shape, grid_shape, n_classes, use_bn=True):
+	def __init__(self, patch_classifier, patch_shape, grid_shape, n_classes, 
+		use_bn=True, atonce_patch_limit=None):
 		super(GridNet, self).__init__()
 
 		self.patch_shape = patch_shape
@@ -19,6 +23,7 @@ class GridNet(nn.Module):
 		self.n_classes = n_classes
 		self.patch_classifier = patch_classifier
 		self.use_bn = use_bn
+		self.atonce_patch_limit = atonce_patch_limit
 
 		self.corrector = self._init_corrector()
 
@@ -51,11 +56,25 @@ class GridNet(nn.Module):
 		else:
 			return self.patch_classifier(x.unsqueeze(0))
 
+	# Helper function to make checkpointing possible in patch_predictions
+	def _ppl(self, patch_list):
+		return torch.cat([self.foreground_classifier(p) for p in patch_list], 0)
+
 	def patch_predictions(self, x):
 		# Reshape input tensor to be of shape (batch_size * h_grid * w_grid, channels, h_patch, w_patch).
 		patch_list = torch.reshape(x, (-1,)+self.patch_shape)
 
-		patch_pred_list = torch.cat([self.foreground_classifier(p) for p in patch_list],0)
+		if self.atonce_patch_limit is None or not any(p.requires_grad for _,p in self.patch_classifier.named_parameters()):
+			patch_pred_list = self._ppl(patch_list)
+		else:
+			cp_chunks = []
+			count = 0
+			while count < len(patch_list):
+				end = min(count+self.atonce_patch_limit, len(patch_list))
+				chunk = cp.checkpoint(self._ppl, patch_list[count:end])
+				cp_chunks.append(chunk)
+				count += self.atonce_patch_limit
+			patch_pred_list = torch.cat(cp_chunks,0)
 
 		patch_pred_grid = torch.reshape(patch_pred_list, (-1,)+self.grid_shape+(self.n_classes,))
 		patch_pred_grid = patch_pred_grid.permute((0,3,1,2))
@@ -77,35 +96,50 @@ class GridNetHex(GridNet):
 		super(GridNetHex, self).__init__(patch_classifier, patch_shape, grid_shape, n_classes, use_bn)
 
 	# Note: hexagdly.Conv2d seems to provide same-padding when stride=1.
-	def _init_corrector(self):
+	'''def _init_corrector(self):
 		cnn_layers = []
 		cnn_layers.append(hexagdly.Conv2d(in_channels=self.n_classes, out_channels=self.n_classes, 
-			kernel_size=3, stride=1, bias=True))
+			kernel_size=1, stride=1, bias=True))
 		if self.use_bn:
 			cnn_layers.append(nn.BatchNorm2d(self.n_classes))
 		cnn_layers.append(nn.ReLU())
 		cnn_layers.append(hexagdly.Conv2d(in_channels=self.n_classes, out_channels=self.n_classes, 
-			kernel_size=5, stride=1, bias=True))
+			kernel_size=1, stride=1, bias=True))
+		return nn.Sequential(*cnn_layers)
+	'''
+
+	# More complex model to make sure there is sufficient complexity to memorize training data:
+	# Conv2d(32)->Conv2d(32)->BN->ReLU->Conv2d(32)->Conv2d(32)->BN->ReLU->Conv2d(n_classes)
+	def _init_corrector(self):
+		cnn_layers = []
+		cnn_layers.append(hexagdly.Conv2d(in_channels=self.n_classes, out_channels=32, 
+			kernel_size=1, stride=1, bias=True))
+		cnn_layers.append(hexagdly.Conv2d(in_channels=32, out_channels=32, 
+			kernel_size=1, stride=1, bias=True))
 		if self.use_bn:
 			cnn_layers.append(nn.BatchNorm2d(self.n_classes))
 		cnn_layers.append(nn.ReLU())
-		cnn_layers.append(hexagdly.Conv2d(in_channels=self.n_classes, out_channels=self.n_classes, 
-			kernel_size=5, stride=1, bias=True))
+
+		cnn_layers.append(hexagdly.Conv2d(in_channels=32, out_channels=32, 
+			kernel_size=1, stride=1, bias=True))
+		cnn_layers.append(hexagdly.Conv2d(in_channels=32, out_channels=32, 
+			kernel_size=1, stride=1, bias=True))
 		if self.use_bn:
 			cnn_layers.append(nn.BatchNorm2d(self.n_classes))
 		cnn_layers.append(nn.ReLU())
-		cnn_layers.append(hexagdly.Conv2d(in_channels=self.n_classes, out_channels=self.n_classes, 
-			kernel_size=3, stride=1, bias=True))
+
+		cnn_layers.append(hexagdly.Conv2d(in_channels=32, out_channels=self.n_classes, 
+			kernel_size=1, stride=1, bias=True))
 		return nn.Sequential(*cnn_layers)
 
 
 def init_weights(m):
-    if type(m) == nn.Conv2d or type(m) == nn.Linear:
-        nn.init.xavier_uniform_(m.weight)
-        nn.init.zeros_(m.bias)
-    if type(m) == nn.BatchNorm2d:
-        nn.init.ones_(m.weight)
-        nn.init.zeros_(m.bias)
+	if type(m) == nn.Conv2d or type(m) == nn.Linear:
+		nn.init.xavier_uniform_(m.weight)
+		nn.init.zeros_(m.bias)
+	if type(m) == nn.BatchNorm2d:
+		nn.init.ones_(m.weight)
+		nn.init.zeros_(m.bias)
 
 
 import sys, os, time, copy
@@ -122,119 +156,119 @@ from datasets import STPatchDataset, PatchGridDataset
 def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile=None, 
 	f_opt=None,
 	finetune=False, accum_iters=1):
-    since = time.time()
+	since = time.time()
 
-    val_acc_history = []
+	val_acc_history = []
 
-    best_model_wts = copy.deepcopy(model.state_dict())
-    best_acc = 0.0
-    
-    # GPU support
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model.to(device)
+	best_model_wts = copy.deepcopy(model.state_dict())
+	best_acc = 0.0
+	
+	# GPU support
+	device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+	model.to(device)
 
-    for epoch in range(num_epochs):
-        print('Epoch {}/{}'.format(epoch, num_epochs - 1), flush=True)
-        print('-' * 10, flush=True)
+	for epoch in range(num_epochs):
+		print('Epoch {}/{}'.format(epoch, num_epochs - 1), flush=True)
+		print('-' * 10, flush=True)
 
-        # Each epoch has a training and validation phase
-        for phase in ['train', 'val']:
-            if phase == 'train':
-                model.train()  # Set model to training mode
-            else:
-                model.eval()   # Set model to evaluate mode
+		# Each epoch has a training and validation phase
+		for phase in ['train', 'val']:
+			if phase == 'train':
+				model.train()  # Set model to training mode
+			else:
+				model.eval()   # Set model to evaluate mode
 
-            # Turn off batch normalization/dropout for patch classifier, but allow parameters to vary if finetuning
-            model.patch_classifier.eval()
-            if finetune and phase=='train':
-                for param in model.patch_classifier.parameters():
-                    param.requires_grad = True
-            
-            running_loss = 0.0
-            running_corrects = 0
-            running_foreground = 0
+			# Turn off batch normalization/dropout for patch classifier, but allow parameters to vary if finetuning
+			model.patch_classifier.eval()
+			if finetune and phase=='train':
+				for param in model.patch_classifier.parameters():
+					param.requires_grad = True
+			
+			running_loss = 0.0
+			running_corrects = 0
+			running_foreground = 0
 
-            # 05/04/2020 -- for computation of AUROC during training.
-            epoch_labels, epoch_softmax = [],[]
+			# 05/04/2020 -- for computation of AUROC during training.
+			epoch_labels, epoch_softmax = [],[]
 
-            # Iterate over data.
-            for batch_ind, (inputs, labels) in enumerate(dataloaders[phase]):
-                inputs = inputs.to(device)
-                labels = labels.to(device)
+			# Iterate over data.
+			for batch_ind, (inputs, labels) in enumerate(dataloaders[phase]):
+				inputs = inputs.to(device)
+				labels = labels.to(device)
 
-                # forward
-                # track history if only in train
-                with torch.set_grad_enabled(phase == 'train'):
-                    # Get model outputs, then filter for foreground patches (label>0).
-                    # Use only foreground patches in loss/accuracy calulcations.
-                    outputs = model(inputs)
-                    outputs = outputs.permute((0,2,3,1))
-                    outputs = torch.reshape(outputs, (-1, outputs.shape[-1]))
-                    labels = torch.reshape(labels, (-1,))
-                    outputs = outputs[labels > 0]
-                    labels = labels[labels > 0]
-                    labels -= 1	# Foreground classes range between [1, N_CLASS].
+				# forward
+				# track history if only in train
+				with torch.set_grad_enabled(phase == 'train'):
+					# Get model outputs, then filter for foreground patches (label>0).
+					# Use only foreground patches in loss/accuracy calulcations.
+					outputs = model(inputs)
+					outputs = outputs.permute((0,2,3,1))
+					outputs = torch.reshape(outputs, (-1, outputs.shape[-1]))
+					labels = torch.reshape(labels, (-1,))
+					outputs = outputs[labels > 0]
+					labels = labels[labels > 0]
+					labels -= 1	# Foreground classes range between [1, N_CLASS].
 
-                    loss = criterion(outputs, labels) / accum_iters
-                    _, preds = torch.max(outputs, 1)
+					loss = criterion(outputs, labels) / accum_iters
+					_, preds = torch.max(outputs, 1)
 
-                    # 05/04/2020 -- for computation of AUROC during training.
-                    epoch_labels.append(labels)
-                    epoch_softmax.append(nn.functional.softmax(outputs, dim=1))
+					# 05/04/2020 -- for computation of AUROC during training.
+					epoch_labels.append(labels)
+					epoch_softmax.append(nn.functional.softmax(outputs, dim=1))
 
-                    # backward + optimize only if in training phase
-                    if phase == 'train':
-                        loss.backward()
-                        
-                        if batch_ind % accum_iters == 0:
-                            optimizer.step()
-                            optimizer.zero_grad()
-                            if f_opt is not None:
-                            	f_opt.step()
-                            	f_opt.zero_grad()
+					# backward + optimize only if in training phase
+					if phase == 'train':
+						loss.backward()
+						
+						if batch_ind % accum_iters == 0:
+							optimizer.step()
+							optimizer.zero_grad()
+							if f_opt is not None:
+								f_opt.step()
+								f_opt.zero_grad()
 
-                # statistics
-                running_loss += loss.item() * inputs.size(0)
-                running_corrects += torch.sum(preds == labels.data)
-                running_foreground += len(labels)
+				# statistics
+				running_loss += loss.item() * inputs.size(0)
+				running_corrects += torch.sum(preds == labels.data)
+				running_foreground += len(labels)
 
 
-            epoch_loss = running_loss / len(dataloaders[phase].dataset)
-            epoch_acc = running_corrects.double() / running_foreground
+			epoch_loss = running_loss / len(dataloaders[phase].dataset)
+			epoch_acc = running_corrects.double() / running_foreground
 
-            print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc), flush=True)
+			print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc), flush=True)
 
-            # 05/04/2020 -- for computation of AUROC during training.
-            epoch_labels = np.concatenate([x.cpu().data.numpy() for x in epoch_labels])
-            epoch_softmax = np.concatenate([x.cpu().data.numpy() for x in epoch_softmax])
-            auroc = class_auroc(epoch_softmax, epoch_labels)
-            print('{} AUROC: {}'.format(phase, "\t".join(list(map(str, auroc)))))
+			# 05/04/2020 -- for computation of AUROC during training.
+			epoch_labels = np.concatenate([x.cpu().data.numpy() for x in epoch_labels])
+			epoch_softmax = np.concatenate([x.cpu().data.numpy() for x in epoch_softmax])
+			auroc = class_auroc(epoch_softmax, epoch_labels)
+			print('{} AUROC: {}'.format(phase, "\t".join(list(map(str, auroc)))))
 
-            # deep copy the model
-            if phase == 'val' and epoch_acc > best_acc:
-                best_acc = epoch_acc
-                best_model_wts = copy.deepcopy(model.state_dict())
-                if outfile is not None:
-                    torch.save(model.state_dict(), outfile)
-                    if f_opt is not None:
-                    	torch.save({
-                    		'g_opt':optimizer.state_dict(),
-                    		'f_opt':f_opt.state_dict()
-                    	}, os.path.splitext(outfile)[0]+".opt")
-                    else:
-                    	torch.save(optimizer.state_dict(), os.path.splitext(outfile)[0]+".opt")
-            if phase == 'val':
-                val_acc_history.append(epoch_acc)
+			# deep copy the model
+			if phase == 'val' and epoch_acc > best_acc:
+				best_acc = epoch_acc
+				best_model_wts = copy.deepcopy(model.state_dict())
+				if outfile is not None:
+					torch.save(model.state_dict(), outfile)
+					if f_opt is not None:
+						torch.save({
+							'g_opt':optimizer.state_dict(),
+							'f_opt':f_opt.state_dict()
+						}, os.path.splitext(outfile)[0]+".opt")
+					else:
+						torch.save(optimizer.state_dict(), os.path.splitext(outfile)[0]+".opt")
+			if phase == 'val':
+				val_acc_history.append(epoch_acc)
 
-        print()
+		print()
 
-    time_elapsed = time.time() - since
-    print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60), flush=True)
-    print('Best val Acc: {:4f}'.format(best_acc), flush=True)
+	time_elapsed = time.time() - since
+	print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60), flush=True)
+	print('Best val Acc: {:4f}'.format(best_acc), flush=True)
 
-    # load best model weights
-    model.load_state_dict(best_model_wts)
-    return model, val_acc_history
+	# load best model weights
+	model.load_state_dict(best_model_wts)
+	return model, val_acc_history
 
 def parse_args():
 	parser = argparse.ArgumentParser(description="GridNet Tissue Segmentation")
