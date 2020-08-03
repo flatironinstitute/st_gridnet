@@ -28,8 +28,14 @@ class GridNet(nn.Module):
 		self.corrector = self._init_corrector()
 
 		# Define a constant vector to be returned by attempted classification of "background" patches
-		self.bg = torch.zeros((1,n_classes))
+		#self.bg = torch.zeros((1,n_classes))
+		# NOTE: This tensor MUST have requires_grad=True for gradient checkpointing to execute. Otherwise, 
+		# it fails during backprop with "element 0 of tensors does not require grad and does not have a grad_fn"
+		self.bg = torch.zeros((1,n_classes), requires_grad=True)
 		self.register_buffer("bg_const", self.bg) # Required for proper device handling with CUDA.
+
+		self.dummy = torch.ones(1, dtype=torch.float32, requires_grad=True)
+		self.register_buffer("dummy_tensor", self.dummy)
 
 	# Define Sequential model containing convolutional layers in global corrector.
 	def _init_corrector(self):
@@ -57,7 +63,8 @@ class GridNet(nn.Module):
 			return self.patch_classifier(x.unsqueeze(0))
 
 	# Helper function to make checkpointing possible in patch_predictions
-	def _ppl(self, patch_list):
+	def _ppl(self, patch_list, dummy_arg=None):
+		assert dummy_arg is not None
 		return torch.cat([self.foreground_classifier(p) for p in patch_list], 0)
 
 	def patch_predictions(self, x):
@@ -65,13 +72,18 @@ class GridNet(nn.Module):
 		patch_list = torch.reshape(x, (-1,)+self.patch_shape)
 
 		if self.atonce_patch_limit is None or not any(p.requires_grad for _,p in self.patch_classifier.named_parameters()):
-			patch_pred_list = self._ppl(patch_list)
+			patch_pred_list = self._ppl(patch_list, self.dummy_tensor)
+		# Process flattened patch list in fixed-sized chunks, checkpointing the result for each.
 		else:
 			cp_chunks = []
 			count = 0
-			while count < len(patch_list):
-				end = min(count+self.atonce_patch_limit, len(patch_list))
-				chunk = cp.checkpoint(self._ppl, patch_list[count:end])
+			while count < len(patch_list):				
+				length = min(self.atonce_patch_limit, len(patch_list)-count)
+				tmp = patch_list.narrow(0, count, length)
+				# NOTE: Without at least one input to checkpoint having requires_grad=True, then the gradient tape
+				# will break and gradients for patch classifier will be None/0.
+				chunk = cp.checkpoint(self._ppl, tmp, self.dummy_tensor)
+
 				cp_chunks.append(chunk)
 				count += self.atonce_patch_limit
 			patch_pred_list = torch.cat(cp_chunks,0)
