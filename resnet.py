@@ -128,15 +128,156 @@ class ResNetSimple(nn.Module):
             all_norms.append(layer_norm)
         return all_norms
 
+
+class ResNetSeg(ResNetSimple):
+    
+    def __init__(self, block, layers, out_dims, num_classes=1000,
+                 groups=1, width_per_group=64, replace_stride_with_dilation=None,
+                 thin=1):
+        super(ResNetSeg, self).__init__(block, layers, num_classes, groups, 
+            width_per_group, replace_stride_with_dilation, thin)
+
+        self.avgpool = nn.AdaptiveAvgPool2d(out_dims)
+        self.conv2 = nn.Conv2d(512//thin * block.expansion, num_classes, kernel_size=1, stride=1)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+    
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        x = self.avgpool(x)
+        x = self.conv2(x)
+
+        return x
+
+
 def resnet18(n_classes, thin=1):
     return ResNetSimple(BasicBlock, [2, 2, 2, 2], num_classes=n_classes, thin=thin)
+
+def resnetseg34(n_classes, out_dims, thin=1):
+    return ResNetSeg(BasicBlock, [3,4,6,3], out_dims, num_classes=n_classes, thin=thin)
+
+######################################
+
+import time, copy
+from utils import class_auroc
+
+
+def train_rnseg(model, dataloaders, criterion, optimizer, num_epochs, outfile=None):
+    since = time.time()
+
+    val_acc_history = []
+
+    best_model_wts = copy.deepcopy(model.state_dict())
+    best_acc = 0.0
+
+    # GPU support
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+
+    for epoch in range(num_epochs):
+        print('Epoch {}/{}'.format(epoch, num_epochs - 1), flush=True)
+        print('-' * 10, flush=True)
+
+        # Each epoch has a training and validation phase
+        for phase in ['train', 'val']:
+            if phase == 'train':
+                model.train()  # Set model to training mode
+            else:
+                model.eval()   # Set model to evaluate mode
+
+            running_loss = 0.0
+            running_corrects = 0
+            running_totals = 0
+
+            epoch_labels, epoch_softmax = [],[]
+
+            # Iterate over data.
+            for inputs, labels in dataloaders[phase]:
+                inputs = inputs.to(device)
+                labels = labels.to(device)
+
+                # zero the parameter gradients
+                optimizer.zero_grad()
+
+                # forward
+                # track history if only in train
+                with torch.set_grad_enabled(phase == 'train'):
+                    # Get model outputs, then filter for foreground patches (label>0).
+                    # Use only foreground patches in loss/accuracy calulcations.
+                    outputs = model(inputs)
+                    outputs = outputs.permute((0,2,3,1))
+                    outputs = torch.reshape(outputs, (-1, outputs.shape[-1]))
+                    labels = torch.reshape(labels, (-1,))
+                    outputs = outputs[labels > 0]
+                    labels = labels[labels > 0]
+
+                    loss = criterion(outputs, labels)
+                    _, preds = torch.max(outputs, 1)
+
+                    epoch_labels.append(labels)
+                    epoch_softmax.append(nn.functional.softmax(outputs, dim=1))
+
+                    # backward + optimize only if in training phase
+                    if phase == 'train':
+                        loss.backward()
+                        optimizer.step()
+
+                # statistics
+                running_loss += loss.item() * inputs.size(0) 
+                running_corrects += torch.sum(preds == labels.data)
+                running_totals += len(labels)
+
+            epoch_loss = running_loss / len(dataloaders[phase].dataset)
+            epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
+
+            print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc), flush=True)
+
+            epoch_labels = np.concatenate([x.cpu().data.numpy() for x in epoch_labels])
+            epoch_softmax = np.concatenate([x.cpu().data.numpy() for x in epoch_softmax])
+            auroc = class_auroc(epoch_softmax, epoch_labels)
+            print('{} AUROC: {}'.format(phase, "\t".join(list(map(str, auroc)))))
+
+            # deep copy the model
+            if phase == 'val' and epoch_acc > best_acc:
+                best_acc = epoch_acc
+                best_model_wts = copy.deepcopy(model.state_dict())
+                if outfile is not None:
+                    torch.save(model.state_dict(), outfile)
+            if phase == 'val':
+                val_acc_history.append(epoch_acc)
+
+        print()
+
+    time_elapsed = time.time() - since
+    print('Training complete in {:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60), flush=True)
+    print('Best val Acc: {:4f}'.format(best_acc), flush=True)
+
+    # load best model weights
+    model.load_state_dict(best_model_wts)
+    return model, val_acc_history
 
 ######################################
 
 import os, sys
+import numpy as np
 sys.path.append("..")
-from datasets import PatchDataset
+from datasets import PatchDataset, StitchGridDataset
 from torch.utils.data import DataLoader
+
+from matplotlib import pyplot as plt 
 
 if __name__ == "__main__":
     pd = PatchDataset(os.path.expanduser("~/Desktop/aba_stdataset_20200212/imgs128"),
@@ -148,4 +289,22 @@ if __name__ == "__main__":
     x,y = next(iter(dl))
     print(rnet(x))
     print(y)
+
+    img_dir = os.path.expanduser("~/Desktop/aba_stdataset_20200212/imgs256/")
+    lbl_dir = os.path.expanduser("~/Desktop/aba_stdataset_20200212/lbls256/")
+    sd = StitchGridDataset(img_dir, lbl_dir)
+    dl = DataLoader(sd, batch_size=1)
+
+    x2, y2 = next(iter(dl))
+    print(x2.shape)
+
+    fig = plt.figure()
+    x2_arr = x2.data.numpy()[0]
+    x2_arr = np.moveaxis(x2_arr, 0, 2)
+    plt.imshow(x2_arr)
+    plt.show()
+
+    rnseg = resnetseg34(13, (32,49), thin=4)
+    out = rnseg(x2)
+    print(out.shape)
 

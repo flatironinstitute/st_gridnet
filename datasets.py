@@ -210,6 +210,23 @@ def stitch_patch_grid(patch_dir, w_st, h_st):
 
     return img_array.astype(np.uint8)
 
+class StitchGridDataset(PatchGridDataset):
+    def __init__(self, img_dir, lbl_dir, transforms=None):
+        super(StitchGridDataset, self).__init__(img_dir, lbl_dir, transforms)
+
+    def __getitem__(self, idx):
+        patch_grid, label_grid = super(StitchGridDataset, self).__getitem__(idx)
+
+        h_st, w_st, c, h_p, w_p = patch_grid.shape
+
+        stitched = torch.zeros(c, h_p*h_st, w_p*w_st)
+
+        for i in range(h_st):
+            for j in range(w_st):
+                stitched[:, i*h_p:(i+1)*h_p, j*h_p:(j+1)*h_p] = patch_grid[i,j]
+
+        return stitched.float(), label_grid
+
 
 ################################ DEPRECATED ###################################
 
