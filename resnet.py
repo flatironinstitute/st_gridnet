@@ -200,7 +200,7 @@ def train_rnseg(model, dataloaders, criterion, optimizer, num_epochs, outfile=No
 
             running_loss = 0.0
             running_corrects = 0
-            running_totals = 0
+            running_foreground = 0
 
             epoch_labels, epoch_softmax = [],[]
 
@@ -223,6 +223,7 @@ def train_rnseg(model, dataloaders, criterion, optimizer, num_epochs, outfile=No
                     labels = torch.reshape(labels, (-1,))
                     outputs = outputs[labels > 0]
                     labels = labels[labels > 0]
+                    labels -= 1
 
                     loss = criterion(outputs, labels)
                     _, preds = torch.max(outputs, 1)
@@ -238,10 +239,10 @@ def train_rnseg(model, dataloaders, criterion, optimizer, num_epochs, outfile=No
                 # statistics
                 running_loss += loss.item() * inputs.size(0) 
                 running_corrects += torch.sum(preds == labels.data)
-                running_totals += len(labels)
+                running_foreground += len(labels)
 
             epoch_loss = running_loss / len(dataloaders[phase].dataset)
-            epoch_acc = running_corrects.double() / len(dataloaders[phase].dataset)
+            epoch_acc = running_corrects.double() / running_foreground
 
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc), flush=True)
 
