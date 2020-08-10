@@ -65,7 +65,8 @@ class GridNet(nn.Module):
 	# Helper function to make checkpointing possible in patch_predictions
 	def _ppl(self, patch_list, dummy_arg=None):
 		assert dummy_arg is not None
-		return torch.cat([self.foreground_classifier(p) for p in patch_list], 0)
+		#return torch.cat([self.foreground_classifier(p) for p in patch_list], 0)
+		return self.patch_classifier(patch_list)
 
 	def patch_predictions(self, x):
 		# Reshape input tensor to be of shape (batch_size * h_grid * w_grid, channels, h_patch, w_patch).
