@@ -72,7 +72,7 @@ class GridNet(nn.Module):
 		# Reshape input tensor to be of shape (batch_size * h_grid * w_grid, channels, h_patch, w_patch).
 		patch_list = torch.reshape(x, (-1,)+self.patch_shape)
 
-		if self.atonce_patch_limit is None or not any(p.requires_grad for _,p in self.patch_classifier.named_parameters()):
+		if self.atonce_patch_limit is None:
 			patch_pred_list = self._ppl(patch_list, self.dummy_tensor)
 		# Process flattened patch list in fixed-sized chunks, checkpointing the result for each.
 		else:
@@ -81,9 +81,13 @@ class GridNet(nn.Module):
 			while count < len(patch_list):				
 				length = min(self.atonce_patch_limit, len(patch_list)-count)
 				tmp = patch_list.narrow(0, count, length)
+
 				# NOTE: Without at least one input to checkpoint having requires_grad=True, then the gradient tape
 				# will break and gradients for patch classifier will be None/0.
-				chunk = cp.checkpoint(self._ppl, tmp, self.dummy_tensor)
+				if any(p.requires_grad for _,p in self.patch_classifier.named_parameters()):
+					chunk = cp.checkpoint(self._ppl, tmp, self.dummy_tensor)
+				else:
+					chunk = self._ppl(tmp, self.dummy_tensor)
 
 				cp_chunks.append(chunk)
 				count += self.atonce_patch_limit
@@ -105,8 +109,10 @@ class GridNet(nn.Module):
 # Extension of GridNet that performs convolution over hexagonally-packed grids.
 # Expects input to employ the addressing scheme employed by HexagDLy.
 class GridNetHex(GridNet):
-	def __init__(self, patch_classifier, patch_shape, grid_shape, n_classes, use_bn=True):
-		super(GridNetHex, self).__init__(patch_classifier, patch_shape, grid_shape, n_classes, use_bn)
+	def __init__(self, patch_classifier, patch_shape, grid_shape, n_classes, 
+		use_bn=True, atonce_patch_limit=None):
+		super(GridNetHex, self).__init__(patch_classifier, patch_shape, grid_shape, n_classes, 
+			use_bn, atonce_patch_limit)
 
 	# Note: hexagdly.Conv2d seems to provide same-padding when stride=1.
 	'''def _init_corrector(self):
