@@ -221,6 +221,11 @@ def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile
 					# Get model outputs, then filter for foreground patches (label>0).
 					# Use only foreground patches in loss/accuracy calulcations.
 					outputs = model(inputs)
+
+					# Outputs: (batch, classes, d1, d2)
+					# Labels: (batch, d1, d2)
+					assert outputs.shape[2]==labels.shape[1] and outputs.shape[3]==labels.shape[2], "Output tensor does not match label dimensions!"
+
 					outputs = outputs.permute((0,2,3,1))
 					outputs = torch.reshape(outputs, (-1, outputs.shape[-1]))
 					labels = torch.reshape(labels, (-1,))
