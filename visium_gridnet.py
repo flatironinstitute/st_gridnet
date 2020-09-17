@@ -14,10 +14,9 @@ Image.MAX_IMAGE_PIXELS = 999999999
 # GridNet imports
 import torch
 from torchvision import transforms
-sys.path.append(os.path.expanduser("~/Documents/Python/st_gridnet/"))
-from densenet import DenseNet
-from gridnet_patches import GridNetHex
-from datasets import PatchDataset, PatchGridDataset
+from src.densenet import DenseNet
+from src.gridnet_patches import GridNetHex
+from src.datasets import PatchDataset, PatchGridDataset
 
 import matplotlib
 matplotlib.use('TkAgg')
@@ -76,7 +75,6 @@ def grid_from_wsi(fullres_imgfile, tissue_positions_listfile, patch_size=256, pr
 
 	# Create a 5D tensor to store the image array, then populate with patches
 	# extracted from the full-resolution image.
-	#img_array = np.zeros((VISIUM_W_ST, VISIUM_H_ST, patch_size, patch_size, 3))
 	img_tensor = torch.zeros((VISIUM_W_ST, VISIUM_H_ST, 3, patch_size, patch_size))
 	for i in range(len(df)):
 		x_ind, y_ind = st_oddu[:,i]
@@ -98,35 +96,7 @@ def grid_from_wsi(fullres_imgfile, tissue_positions_listfile, patch_size=256, pr
 			print("Warning: row %d column %d outside bounds of Visium array" % (x_ind, y_ind))
 			continue
 
-		#img_array[y_ind, x_ind] = patch
 		img_tensor[y_ind, x_ind] = patch
-
-	#img_tensor = torch.from_numpy(img_array).permute((0,1,4,2,3))
-
-	'''
-	fig, ax = plt.subplots(1,3, figsize=(10,5))
-	
-	#ax[0].scatter(df['array_col'], df['array_row'])
-	#ax[0].scatter(df['array_col'][:30], df['array_row'][:30], c='r')
-	ax[0].scatter(st_oddr[:,0], st_oddr[:,1])
-	ax[0].scatter(st_oddr[:30,0], st_oddr[:30,1], c='r')
-	ax[0].invert_yaxis()
-	ax[0].set_aspect('equal')
-
-	#pos = np.moveaxis(np.vstack((df['array_col'], df['array_row'])), 0, 1)
-	#pos = np.rot90(pos)
-	#ax[1].scatter(pos[0,:], pos[1,:])
-	#ax[1].scatter(pos[0,:][:30], pos[1,:][:30], c='r')
-	ax[1].scatter(st_oddu[0,:], st_oddu[1,:])
-	ax[1].scatter(st_oddu[0,:30], st_oddu[1,:30], c='r')
-	ax[1].invert_yaxis()
-	ax[1].set_aspect('equal')
-
-	ax[2].imshow(img)
-	ax[2].scatter(df['px_col'], df['px_row'])
-	ax[2].set_aspect('equal')
-	plt.show()
-	'''
 
 	return img_tensor.float()
 
@@ -260,12 +230,6 @@ def create_maynard_training_set(dest_dir):
 		patch_grid = grid_from_wsi(img_file, tpl_file, patch_size)
 		label_grid = to_hexagdly_label_tensor(annot_file, tpl_file, class_names)
 
-		# Render foreground spots and labels as a sanity check.
-		#fig, ax = plt.subplots(1,2)
-		#ax[0].imshow(patch_grid.data.numpy().max(axis=(2,3,4)), vmin=0, vmax=1)
-		#ax[1].imshow(label_grid.data.numpy(), vmin=0, vmax=len(class_names))
-		#plt.show()
-
 		if not os.path.isdir(os.path.join(patch_dir, "%d" % s)):
 			os.mkdir(os.path.join(patch_dir, "%d" % s))
 
@@ -300,6 +264,8 @@ def test_maynard_training_set(dest_dir):
 	print(x.shape, x.min(), x.max())
 	print(y.shape, y.min(), y.max())
 
+
+import argparse
 
 if __name__ == "__main__":
 	sample = "V007-CGND-HRA-02746-A"

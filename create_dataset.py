@@ -43,14 +43,6 @@ def create_labelmat(st_coords, annots, st_dims, out_dir, array_name):
 	Image.fromarray(lmat).save(os.path.join(out_dir, array_name+".png"), format="PNG")
 
 
-############### ABA DATASET ###############
-
-def visium_to_pixel(coords, xdim, ydim):
-	raise NotImplementedError
-
-def create_maynard_dataset():
-	raise NotImplementedError
-
 ############### MANIATIS DATASET ###############
 
 def st_to_pixel(c, xdim, ydim):
@@ -100,6 +92,52 @@ def create_maniatis_dataset(out_dir, patch_size=256):
 
 
 ############### MAYNARD DATASET ###############
+
+from visium_gridnet import grid_from_wsi, to_hexagdly_label_tensor
+
+def create_maynard_training_set(dest_dir):
+	maynard_dir = os.path.expanduser("~/Documents/Splotch_projects/Splotch_DLPFC/data/")
+	fullres_dir = os.path.expanduser("~/Desktop/Visium/Maynard_ImageData/")
+
+	class_names = ["Layer1", "Layer2", "Layer3", "Layer4", "Layer5", "Layer6", "WM"]
+	
+	slides = [151507, 151508, 151509, 151510, 151669, 151670, 151671, 151672, 
+		151673, 151674, 151675, 151676]
+
+	patch_size = 256
+
+	patch_dir = os.path.join(dest_dir, "imgs")
+	label_dir = os.path.join(dest_dir, "lbls")
+	for dname in [patch_dir, label_dir]:
+		if not os.path.isdir(dname):
+			os.mkdir(dname)
+
+	for s in slides:
+		print(s)
+
+		annot_file = os.path.join(maynard_dir, "%d_loupe_annots.csv" % s)
+		tpl_file = os.path.join(maynard_dir, "%d_tissue_positions_list.csv" % s)
+
+		img_file = os.path.join(fullres_dir, "%d_full_image.tif" % s)
+
+		patch_grid = grid_from_wsi(img_file, tpl_file, patch_size)
+		label_grid = to_hexagdly_label_tensor(annot_file, tpl_file, class_names)
+
+		if not os.path.isdir(os.path.join(patch_dir, "%d" % s)):
+			os.mkdir(os.path.join(patch_dir, "%d" % s))
+
+		for oddu_x in range(VISIUM_H_ST):
+			for oddu_y in range(VISIUM_W_ST):
+				if patch_grid[oddu_y, oddu_x].max() > 0:
+					patch = patch_grid[oddu_y, oddu_x]
+
+					patch = np.moveaxis(patch.data.numpy().astype(np.uint8), 0, 2)
+					
+					Image.fromarray(patch).save(
+						os.path.join(patch_dir, "%d" % s, "%d_%d.jpg" % (oddu_x, oddu_y)), "JPEG")
+		
+		Image.fromarray(label_grid.data.numpy().astype(np.int32)).save(
+			os.path.join(label_dir, "%d.png" % s), "PNG")
 
 ############### MAIN FUNCTION ###############
 
