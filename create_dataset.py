@@ -128,6 +128,7 @@ def create_visium_dataset(wsi_files, annot_files, tpl_files, dest_dir, class_nam
 		
 		Image.fromarray(label_grid.data.numpy().astype(np.int32)).save(
 			os.path.join(label_dir, "%s.png" % slide), "PNG")
+		
 
 ############### MAIN FUNCTION ###############
 

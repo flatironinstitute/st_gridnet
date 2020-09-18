@@ -7,6 +7,7 @@
 import sys, os
 import numpy as np
 import pandas as pd
+from pathlib import Path
 
 from PIL import Image
 Image.MAX_IMAGE_PIXELS = 999999999
@@ -200,47 +201,27 @@ def forward_pass(input_tensor, model_file, class_names, patch_size=256):
 	return preds
 
 
-############### CREATE MAYNARD GRIDNET TRAINING DATA ###############
-
-def test_maynard_training_set(dest_dir):
-	patch_dir = os.path.join(dest_dir, "imgs")
-	label_dir = os.path.join(dest_dir, "lbls")
-
-	pdat = PatchDataset(patch_dir, label_dir)
-	print(len(pdat))
-
-	x,y = next(iter(pdat))
-	print(x.shape, x.min(), x.max())
-	print(y)
-
-	gdat = PatchGridDataset(patch_dir, label_dir)
-	print(len(gdat))
-
-	x,y = next(iter(gdat))
-	print(x.shape, x.min(), x.max())
-	print(y.shape, y.min(), y.max())
-
+############### COMMAND LINE FUNCTIONALITY ###############
 
 import argparse
 
-if __name__ == "__main__":
-	sample = "V007-CGND-HRA-02746-A"
-	slide_lot = "LV19B21-ID001_D"
 
-	fullres_imgfile = "ALSFTD_Cortex/Visium_HE/%s.jpg" % slide_lot
-	tissue_positions_listfile = "ALSFTD_Cortex/spaceranger_output/%s/spatial/tissue_positions_list.csv" % sample
-	class_names = ["Layer1", "Layer2", "Layer3", "Layer4", "Layer5", "Layer6", "White Matter"]
-	model_file = "ALSFTD_Cortex/gnethex_memdense_maynard_lr0.0006374_alpha0.09602.pth"
+if __name__ == "__main__":
+	parser = argparse.ArgumentParser()
+	parser.add_argument('-m', '--model-file', type=str, required=True, help="Path to model file")
+	parser.add_argument('-i', '--img', type=str, required=True, help="Path to image file")
+	parser.add_argument('-t', '--tpl', type=str, required=True, help="Path to tissue position list file")
+	parser.add_argument('-c', '--class-names', nargs='+', required=True, help="Class names")
+	parser.add_argument('-a', '--annot', type=str, help="Path for output annotation file")
+	args = parser.parse_args()
 
 	# Preprocessing applied to each patch:
 	xform = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-	x = grid_from_wsi(fullres_imgfile, tissue_positions_listfile, preprocess_xform=xform)
-	y = forward_pass(x, model_file, class_names, patch_size=256)
-	to_loupe_annots(y, tissue_positions_listfile, class_names, "%s_annots.csv" % sample)
+	if args.annot is None:
+		args.annot = Path(args.img).name.split('.')[0]
 
-	#dest_dir = os.path.expanduser("~/Documents/Splotch_projects/Splotch_DLPFC/data/maynard_patchdata_20200821/")
-	#create_maynard_training_set(dest_dir)
-	#test_maynard_training_set(dest_dir)
-
+	x = grid_from_wsi(args.img, args.tpl, preprocess_xform=xform)
+	y = forward_pass(x, args.model_file, args.class_names, patch_size=256)
+	to_loupe_annots(y, args.tpl, args.class_names, args.annot)
 
