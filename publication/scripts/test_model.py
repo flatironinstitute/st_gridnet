@@ -8,15 +8,14 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 sys.path.append("../..")
-from datasets import PatchGridDataset, StitchGridDataset
-from densenet import DenseNet
-from resnet import resnetseg34
-from gridnet_patches import GridNet
-from utils import all_fgd_predictions, class_auroc, plot_confusion_matrix
-from utils import misclass_density, plot_class_boundaries
+from src.datasets import PatchGridDataset, StitchGridDataset
+from src.densenet import DenseNet
+from src.resnet import resnetseg34
+from src.gridnet_patches import GridNet
+from src.utils import all_fgd_predictions, class_auroc, plot_confusion_matrix
+from src.utils import misclass_density, plot_class_boundaries
 
-def aba(resnetseg):
-	data_dir = "/mnt/ceph/users/adaly/datasets/aba_stdataset_20200212/"
+def aba(img_test, lbl_test, model_file, resnetseg):
 	class_names = ["Midbrain","Isocortex","Medulla","Striatum",
 		"C. nuclei","C. cortex","Thalamus","Olf. areas",
 		"Cort. sub.","Pons","Pallidum","Hipp. form.","Hypothal."]
@@ -29,20 +28,15 @@ def aba(resnetseg):
 		transforms.ToTensor(),
 		transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 	])
-	img_test = os.path.join(data_dir, "imgs256_test")
-	lbl_test = os.path.join(data_dir, "lbls256_test")
 
 	if resnetseg:
 		test_set = StitchGridDataset(img_test, lbl_test, xform)
-		model_file = "../data/rnseg_aba.pth"
 	else:
 		test_set = PatchGridDataset(img_test, lbl_test, xform)
-		model_file = "../data/gnet_memdense_aba_lr0.0001857_alpha0.05618.pth"
 
 	return test_set, class_names, model_file, patch_size, h_st, w_st
 
-def maniatis(resnetseg):
-	data_dir = "/mnt/ceph/users/adaly/datasets/mouse_sc_stdataset_20200207/"	
+def maniatis(img_test, lbl_test, model_file, resnetseg):
 	class_names = ["Vent. Med. White", "Vent. Horn", "Vent. Lat. White", "Med. Gray", 
 		"Dors. Horn", "Dors. Edge", "Med. Lat. White", "Vent. Edge", "Dors. Med. White",
 		"Cent. Canal", "Lat. Edge"]
@@ -55,21 +49,20 @@ def maniatis(resnetseg):
 		transforms.ToTensor(),
 		transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 	])
-	img_test = os.path.join(data_dir, "imgs256_test")
-	lbl_test = os.path.join(data_dir, "lbls256_test")
 
 	if resnetseg:
 		test_set = StitchGridDataset(img_test, lbl_test, xform)
-		model_file = "../data/rnseg_maniatis.pth"
 	else:
 		test_set = PatchGridDataset(img_test, lbl_test, xform)
-		model_file = "../data/gnet_memdense_maniatis_lr0.0006685_alpha0.03527.pth"
 
 	return test_set, class_names, model_file, patch_size, h_st, w_st
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
 	parser.add_argument("dataset", type=str, help='"aba" or "maniatis"')
+	parser.add_argument('imgtest', type=str, help='Path to test set image directory')
+	parser.add_argument('lbltest', type=str, help='Path to test set label directory')
+	parser.add_argument('modelfile', type=str, help='Path to model file')
 	parser.add_argument("-r", "--resnetseg", action="store_true")
 	args = parser.parse_args()
 
@@ -77,7 +70,8 @@ if __name__ == "__main__":
 		data_fn = aba
 	else:
 		data_fn = maniatis
-	test_set, class_names, model_file, patch_size, h_st, w_st = data_fn(args.resnetseg)
+	test_set, class_names, model_file, patch_size, h_st, w_st = data_fn(
+		args.imgtest, args.lbltest, args.modelfile, args.resnetseg)
 
 	dl = DataLoader(test_set, batch_size=1, shuffle=False)
 

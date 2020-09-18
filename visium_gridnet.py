@@ -219,7 +219,7 @@ if __name__ == "__main__":
 	xform = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
 	if args.annot is None:
-		args.annot = Path(args.img).name.split('.')[0]
+		args.annot = Path(args.img).name.split('.')[0] + "_loupe.csv"
 
 	x = grid_from_wsi(args.img, args.tpl, preprocess_xform=xform)
 	y = forward_pass(x, args.model_file, args.class_names, patch_size=256)

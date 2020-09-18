@@ -172,7 +172,7 @@ def resnetseg34(n_classes, out_dims, thin=1):
 ######################################
 
 import time, copy
-from utils import class_auroc
+from .utils import class_auroc
 
 
 def train_rnseg(model, dataloaders, criterion, optimizer, num_epochs, outfile=None):
@@ -269,43 +269,4 @@ def train_rnseg(model, dataloaders, criterion, optimizer, num_epochs, outfile=No
     # load best model weights
     model.load_state_dict(best_model_wts)
     return model, val_acc_history
-
-######################################
-
-import os, sys
-import numpy as np
-sys.path.append("..")
-from datasets import PatchDataset, StitchGridDataset
-from torch.utils.data import DataLoader
-
-from matplotlib import pyplot as plt 
-
-if __name__ == "__main__":
-    pd = PatchDataset(os.path.expanduser("~/Desktop/aba_stdataset_20200212/imgs128"),
-        os.path.expanduser("~/Desktop/aba_stdataset_20200212/lbls128"))
-    dl = DataLoader(pd, batch_size=10, shuffle=True)
-
-    rnet = resnet18(13, thin=4)
-
-    x,y = next(iter(dl))
-    print(rnet(x))
-    print(y)
-
-    img_dir = os.path.expanduser("~/Desktop/aba_stdataset_20200212/imgs256/")
-    lbl_dir = os.path.expanduser("~/Desktop/aba_stdataset_20200212/lbls256/")
-    sd = StitchGridDataset(img_dir, lbl_dir)
-    dl = DataLoader(sd, batch_size=1)
-
-    x2, y2 = next(iter(dl))
-    print(x2.shape)
-
-    fig = plt.figure()
-    x2_arr = x2.data.numpy()[0]
-    x2_arr = np.moveaxis(x2_arr, 0, 2)
-    plt.imshow(x2_arr)
-    plt.show()
-
-    rnseg = resnetseg34(13, (32,49), thin=4)
-    out = rnseg(x2)
-    print(out.shape)
 

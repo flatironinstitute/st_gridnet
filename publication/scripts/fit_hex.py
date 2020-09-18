@@ -5,12 +5,20 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 sys.path.append("../..")
-from datasets import PatchDataset, PatchGridDataset
-from densenet import DenseNet
-from gridnet_patches import GridNetHex
-from training import train_gnet_2stage, train_gnet_atonce
+from src.datasets import PatchDataset, PatchGridDataset
+from src.densenet import DenseNet
+from src.gridnet_patches import GridNetHex
+from src.training import train_gnet_2stage, train_gnet_atonce
 
-data_dir = "/mnt/ceph/users/adaly/datasets/maynard_patchdata_20200821/"
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('imgtrain', type=str, help='Path to training set image directory')
+parser.add_argument('lbltrain', type=str, help='Path to training set label directory')
+parser.add_argument('imgval', type=str, help='Path to validation set image directory')
+parser.add_argument('lblval', type=str, help='Path to validation set label directory')
+parser.add_argument('-o', '--outfile', required=True, help='Path to save model output')
+args = parser.parse_args()
 
 patch_size = 256
 h_st, w_st = 78, 64
@@ -23,13 +31,9 @@ xform = transforms.Compose([
 
 atonce_patch_limit=32
 
-img_train = os.path.join(data_dir, "imgs_train")
-lbl_train = os.path.join(data_dir, "lbls_train")
 patch_train = PatchDataset(img_train, lbl_train, xform)
 grid_train = PatchGridDataset(img_train, lbl_train, xform)
 
-img_val = os.path.join(data_dir, "imgs_val")
-lbl_val = os.path.join(data_dir, "lbls_val")
 patch_val = PatchDataset(img_val, lbl_val, xform)
 grid_val = PatchGridDataset(img_val, lbl_val, xform)
 
@@ -59,7 +63,6 @@ print("Learning Rate: %.4g" % lr)
 print("Alpha: %.4g" % alpha)
 
 # Perform fitting and save model
-outfile = "../data/gnethex_memdense_maynard"
 train_gnet_2stage(g, [patch_loaders, grid_loaders], lr, alpha=alpha, num_epochs=100,
-	outfile=outfile)
+	outfile=args.outfile)
 
