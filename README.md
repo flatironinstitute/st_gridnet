@@ -66,7 +66,7 @@ where column names indicate the indices of foreground (tissue-containing) spots 
 The module ```create_dataset.py``` provides command-line functionality for generating training data:
 
 ```bash
-python create_dataset.py -o [OUTPUT_DIR] -i [tissue1.tif, ..., tissueN.tif] -a [tissue1_annot.tsv, ..., tissueN_annot.tsv] [-p [PATCH_SIZE]]
+python create_dataset.py -o [OUTPUT_DIR] -i [tissue1.tif ... tissueN.tif] -a [tissue1_annot.tsv ... tissueN_annot.tsv] [-p [PATCH_SIZE]]
 ```
 
 Note: in order to map between coordinates in the ST array and pixel locations in the image, we assume that images for Cartestian ST experiments have been cropped such that the four corners of the tissue image correspond to the centroids of the four corner spots in the array. The center-center distance for an image with long dimension 6200 pixels should be specified with the ```-d``` argument.
@@ -76,7 +76,7 @@ Note: in order to map between coordinates in the ST array and pixel locations in
 For data obtained from Visium ST experiments, we have provided a module, ```visium_gridnet.py``` that interfaces directly with the outputs from 10x Genomics' [SpaceRanger](https://support.10xgenomics.com/spatial-gene-expression/software/pipelines/latest/output/images) and [Loupe](https://support.10xgenomics.com/single-cell-gene-expression/software/visualization/latest/tutorial-interoperability). As with the Cartesian ST data, we have provided command-line functionality for generating a training set using the ```create_dataset.py``` module:
 
 ```bash
-python create_dataset.py -o [OUTPUT_DIR] -i [tissue1.tif, ..., tissueN.tif] -a [tissue1_loupe.csv, ..., tissueN_loupe.csv] -t [tissue1_positions_list.csv, ..., tissueN_positions_list.csv] [-c [class1, ..., classK]] [-p [PATCH_SIZE]] [-d [CENTER_CENTER_DIST]
+python create_dataset.py -o [OUTPUT_DIR] -i [tissue1.tif ... tissueN.tif] -a [tissue1_loupe.csv ... tissueN_loupe.csv] -t [tissue1_positions_list.csv ... tissueN_positions_list.csv] [-c [class1 ... classK]] [-p [PATCH_SIZE]] [-d [CENTER_CENTER_DIST]]
 ```
 
 where annotation files (tissueX_loupe.csv) are in the format exported by Loupe Browser and tissueX_positions_list.csv are in the format exported by SpaceRanger.
@@ -88,6 +88,14 @@ Note: Visium ST arrays are indexed in an "odd-right" fashion, where every other 
 We provide a Jupyter notebook, ```gridnet_training_example.ipynb```, that details the process by which you may go about training a GridNet model. Additionally, all scripts used to generate the models and figures in our publication are included in ```publication/scripts```.
 
 ### Predicting on new data
+
+We have provided command-line functionality for generating patch annotation predictions on new Visium image data using a saved ```GridNetHex``` model:
+
+```bash
+python visium_gridnet.py -m [PATH_TO_MODELFILE] -i [PATH_TO_IMAGEFILE] -t [PATH_TO_TISSUE_POSITION_LISTFILE] -c [class1 ... classK] [-a [ANNOT_FILE_DEST]]
+```
+where the model file contains the state dict of the ```GridNetHex``` model saved with `torch.save(model.state_dict(), model_file)`. We have provided an example of file for a model trained on the 12-array Maynard dataset in ```data/trained_models/gnethex_maynard.pth```, which predicts one of seven annotations for patches of human dorsolateral prefrontal cortex tissue (Layer1, Layer2, Layer3, Layer4, Layer5, Layer6, WM). 
+Annotation files are output as CSV files that are compatible with Loupe, thus allowing users to load the predicted annotations into the Loupe browser for visualization and manual correction (see "Categories" section of the [Loupe documentation](https://support.10xgenomics.com/single-cell-gene-expression/software/visualization/latest/tutorial-interoperability) for further details on importing and exporting of spot labels).
 
 ## Citation
 
