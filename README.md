@@ -3,7 +3,7 @@
 ## Introduction
 This is an implementation of the model described in our publication "A convolutional neural network for common-coordinate registration of high-resolution histology images," which was developed principally for applications to registration of data collected during solid-phase capture spatial transcriptomics (ST) experiments.
 
-![GridNet schematic](imgs/GridNet.jpg)
+![GridNet schematic](publication/GridNet.jpg)
 
 ## Prerequisites
 * Python (3.7)
