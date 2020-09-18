@@ -3,7 +3,7 @@ import numpy as np
 
 from matplotlib import pyplot as plt
 
-from datasets import PatchDataset, PatchGridDataset
+from utils.datasets import PatchDataset, PatchGridDataset
 
 
 ############### ADJACENCY MATRIX ROUTINES ###############
@@ -212,88 +212,4 @@ def plot_class_examples(patch_dataset, n_classes, class_names=None, n_samples=3)
 	
 	plt.tight_layout()
 	return fig
-
-
-############### ALLEN BRAIN DATA ###############
-
-def aba_figs():
-	imgdir = os.path.expanduser("~/Desktop/aba_stdataset_20200212/imgs128/")
-	lbldir = os.path.expanduser("~/Desktop/aba_stdataset_20200212/lbls128/")
-
-	classes = ["Midbrain","Isocortex","Medulla","Striatum",
-           "C. nuclei","C. cortex","Thalamus","Olf. areas",
-           "Cort. sub.","Pons","Pallidum","Hipp. form.","Hypothal."]
-
-	dat = PatchGridDataset(imgdir, lbldir)
-	pdat = PatchDataset(imgdir, lbldir)
-
-	fig = class_adjacency(dat, 13, classes)
-	plt.savefig("publication/figures/aba128_class_adjacency.png", format="PNG", dpi=300)
-	plt.close()
-
-	fig = plot_labels(dat, 13, classes)
-	plt.savefig("publication/figures/aba128_label_matrix.png", format="PNG", dpi=300)
-	plt.close()
-
-	fig = plot_class_examples(pdat, 13, classes)
-	plt.savefig("publication/figures/aba128_class_examples.png", format="PNG", dpi=300)
-	plt.close()
-
-
-############### MANIATIS DATA ###############
-
-def maniatis_figs():
-	imgdir = os.path.expanduser("~/Desktop/maniatis_stdataset_20200714/imgs256/")
-	lbldir = os.path.expanduser("~/Desktop/maniatis_stdataset_20200714/lbls256/")
-
-	classes = ["Vent. Med. White", "Vent. Horn", "Vent. Lat. White", "Med. Gray", 
-	"Dors. Horn", "Dors. Edge", "Med. Lat. White", "Vent. Edge", "Dors. Med. White",
-	"Cent. Canal", "Lat. Edge"]
-
-	dat = PatchGridDataset(imgdir, lbldir)
-	pdat = PatchDataset(imgdir, lbldir)
-
-	fig = class_adjacency(dat, 11, classes)
-	plt.savefig("publication/figures/maniatis_class_adjacency.png", format="PNG", dpi=300)
-	plt.close()
-
-	fig = plot_labels(dat, 11, classes, selected_index=66) # CN93_E2
-	plt.savefig("publication/figures/maniatis_label_matrix.png", format="PNG", dpi=300)
-	plt.close()
-
-	fig = plot_class_examples(pdat, 11, classes)
-	plt.savefig("publication/figures/maniatis_class_examples.png", format="PNG", dpi=300)
-	plt.close()
-
-
-############### MAYNARD DATA ###############
-
-def maynard_figs():
-	imgdir = os.path.expanduser("~/Documents/Splotch_projects/Splotch_DLPFC/data/maynard_patchdata/imgs/")
-	lbldir = os.path.expanduser("~/Documents/Splotch_projects/Splotch_DLPFC/data/maynard_patchdata/lbls/")
-
-	classes = ["Layer 1", "Layer 2", "Layer 3", "Layer 4", "Layer 5", "Layer 6", "White Matter"]
-
-	dat = PatchGridDataset(imgdir, lbldir)
-	pdat = PatchDataset(imgdir, lbldir)
-
-	fig = class_adjacency_hex(dat, 7, classes)
-	plt.savefig("publication/figures/maynard_class_adjacency.png", format="PNG", dpi=300)
-	plt.close()
-
-	fig = plot_labels_hex(dat, 7, classes)
-	plt.savefig("publication/figures/maynard_label_matrix.png", format="PNG", dpi=300)
-	plt.close()
-
-	fig = plot_class_examples(pdat, 7, classes)
-	plt.savefig("publication/figures/maynard_class_examples.png", format="PNG", dpi=300)
-	plt.close()
-
-############### MAIN FUNCTION ###############
-
-if __name__ == "__main__":
-	aba_figs()
-	maniatis_figs()
-	maynard_figs()
-
 
