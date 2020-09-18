@@ -52,7 +52,7 @@ In order to simplify the processing of inputs to GridNet, we have provided modul
 
 #### Cartesian ST
 
-For data obtained from Cartesian ST experiments, we have provided a module that interfaces with annotations files of the format employed by Maniatis et al. [[1]](#1). For each tissue image, a corresponding tab-separated value (TSV) file of the following format:
+For data obtained from Cartesian ST experiments, we have provided functionality to generate GridNet training data from files of the format employed by Maniatis et al. [[1]](#1). Briefly, for each tissue image, annotation data should be provided in a tab-separated value (TSV) file of the following format:
 
 |        | x0_y0 | x1_y1 | ...  | xN_yN |
 | ------ | ----- | ----- | ---- | ------|
@@ -63,9 +63,25 @@ For data obtained from Cartesian ST experiments, we have provided a module that 
 
 where column names indicate the indices of foreground (tissue-containing) spots in the ST array, and the column vectors are one-hot encoded to indicate the class membership of each spot.
 
+The module ```create_dataset.py``` provides command-line functionality for generating training data:
+
+```bash
+python create_dataset.py -o [OUTPUT_DIR] -i [tissue1.tif, ..., tissueN.tif] -a [tissue1_annot.tsv, ..., tissueN_annot.tsv] [-p [PATCH_SIZE]]
+```
+
+Note: in order to map between coordinates in the ST array and pixel locations in the image, we assume that images for Cartestian ST experiments have been cropped such that the four corners of the tissue image correspond to the centroids of the four corner spots in the array. The center-center distance for an image with long dimension 6200 pixels should be specified with the ```-d``` argument.
+
 #### Visium ST
 
-For data obtained from Visium ST experiments, we have provided a module that interfaces directly with the outputs from 10x Genomics' [SpaceRanger](https://support.10xgenomics.com/spatial-gene-expression/software/pipelines/latest/output/images) and [Loupe](https://support.10xgenomics.com/single-cell-gene-expression/software/visualization/latest/tutorial-interoperability).
+For data obtained from Visium ST experiments, we have provided a module, ```visium_gridnet.py``` that interfaces directly with the outputs from 10x Genomics' [SpaceRanger](https://support.10xgenomics.com/spatial-gene-expression/software/pipelines/latest/output/images) and [Loupe](https://support.10xgenomics.com/single-cell-gene-expression/software/visualization/latest/tutorial-interoperability). As with the Cartesian ST data, we have provided command-line functionality for generating a training set using the ```create_dataset.py``` module:
+
+```bash
+python create_dataset.py -o [OUTPUT_DIR] -i [tissue1.tif, ..., tissueN.tif] -a [tissue1_loupe.csv, ..., tissueN_loupe.csv] -t [tissue1_positions_list.csv, ..., tissueN_positions_list.csv] [-c [class1, ..., classK]] [-p [PATCH_SIZE]] [-d [CENTER_CENTER_DIST]
+```
+
+where annotation files (tissueX_loupe.csv) are in the format exported by Loupe Browser and tissueX_positions_list.csv are in the format exported by SpaceRanger.
+
+Note: Visium ST arrays are indexed in an "odd-right" fashion, where every other row is implicitly shifted right, in order to represent hexagonally-packed data with integer indexing. The HexagDLy package, which is used to perform convolutions over hexagonally packed grids in GridNet, requires input to be represented in an "odd-down" fashion, where every other *column* is implicitly shifted down. In order to reconcile this, the ```visium_gridnet``` module rotates input arrays by 90 degrees when generating inputs for GridNet. The command-line functionality of the same module, discussed [later](#predicting-on-new-data), handles this rotation for the user and outputs labels that match the original indexing scheme.
 
 ### Training a model
 
