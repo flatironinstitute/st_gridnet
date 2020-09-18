@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader, random_split
 
 import numpy as np
 
-from utils import class_auroc
+from .utils import class_auroc
 
 # import the checkpoint API 
 import torch.utils.checkpoint as cp
@@ -168,8 +168,8 @@ import matplotlib
 matplotlib.use('agg')
 from matplotlib import pyplot as plt
 
-from patch_classifier import patchcnn_simple, densenet121, densenet_preprocess
-from datasets import STPatchDataset, PatchGridDataset
+from .patch_classifier import patchcnn_simple, densenet121, densenet_preprocess
+from .datasets import STPatchDataset, PatchGridDataset
 
 
 def train_model(model, dataloaders, criterion, optimizer, num_epochs=25, outfile=None, 

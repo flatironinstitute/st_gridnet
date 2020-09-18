@@ -147,7 +147,7 @@ def densenet_preprocess():
 
 import time, copy
 import argparse
-from datasets import PatchDataset
+from .datasets import PatchDataset
 from torch.utils.data import DataLoader, random_split
 
 def train_model(model, dataloaders, criterion, optimizer, num_epochs, outfile=None):

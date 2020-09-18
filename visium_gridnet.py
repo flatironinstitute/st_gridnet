@@ -101,42 +101,6 @@ def grid_from_wsi(fullres_imgfile, tissue_positions_listfile, patch_size=256, pr
 	return img_tensor.float()
 
 
-############### GRIDNET LABEL PREDICTIONS ###############
-
-def forward_pass(input_tensor, model_file, class_names, patch_size=256):
-	n_class = len(class_names)
-
-	atonce_patch_limit=32
-
-	# Construct model and load parameters
-	f = DenseNet(num_classes=n_class, small_inputs=False, efficient=False,
-		growth_rate=32, block_config=(6, 12, 24, 16), num_init_features=64, bn_size=4, drop_rate=0)
-	# Note that grid dimensions are swapped due to rotation for HexagDLy indexing conventions!
-	g = GridNetHex(f, patch_shape=(3,patch_size,patch_size), grid_shape=(VISIUM_W_ST, VISIUM_H_ST), 
-		n_classes=n_class, use_bn=False, atonce_patch_limit=atonce_patch_limit)
-
-	# Load parameters of fit model
-	if torch.cuda.is_available():
-		g.load_state_dict(torch.load(model_file))
-	else:
-		g.load_state_dict(torch.load(model_file, map_location=torch.device('cpu')))
-
-	g.eval()
-
-	with torch.no_grad():
-		y = g(torch.unsqueeze(input_tensor,0))[0]
-		_, preds = torch.max(y, 0)
-
-		for i in range(VISIUM_W_ST):
-			for j in range(VISIUM_H_ST):
-				if torch.max(x[i,j])==0:
-					preds[i,j] = 0   # Zero-out background patches.
-				else:
-					preds[i,j] += 1  # Foreground patches between 1 and N_class.
-
-	return preds
-
-
 ############### LOUPE ANNOTATION <==> LABEL TENSORS ###############
 
 def to_loupe_annots(label_tensor, tissue_positions_listfile, class_names, output_file):
@@ -200,51 +164,43 @@ def to_hexagdly_label_tensor(loupe_annotfile, tissue_positions_listfile, class_n
 	return label_tensor.long()
 
 
+############### GRIDNET LABEL PREDICTIONS ###############
+
+def forward_pass(input_tensor, model_file, class_names, patch_size=256):
+	n_class = len(class_names)
+
+	atonce_patch_limit=32
+
+	# Construct model and load parameters
+	f = DenseNet(num_classes=n_class, small_inputs=False, efficient=False,
+		growth_rate=32, block_config=(6, 12, 24, 16), num_init_features=64, bn_size=4, drop_rate=0)
+	# Note that grid dimensions are swapped due to rotation for HexagDLy indexing conventions!
+	g = GridNetHex(f, patch_shape=(3,patch_size,patch_size), grid_shape=(VISIUM_W_ST, VISIUM_H_ST), 
+		n_classes=n_class, use_bn=False, atonce_patch_limit=atonce_patch_limit)
+
+	# Load parameters of fit model
+	if torch.cuda.is_available():
+		g.load_state_dict(torch.load(model_file))
+	else:
+		g.load_state_dict(torch.load(model_file, map_location=torch.device('cpu')))
+
+	g.eval()
+
+	with torch.no_grad():
+		y = g(torch.unsqueeze(input_tensor,0))[0]
+		_, preds = torch.max(y, 0)
+
+		for i in range(VISIUM_W_ST):
+			for j in range(VISIUM_H_ST):
+				if torch.max(x[i,j])==0:
+					preds[i,j] = 0   # Zero-out background patches.
+				else:
+					preds[i,j] += 1  # Foreground patches between 1 and N_class.
+
+	return preds
+
+
 ############### CREATE MAYNARD GRIDNET TRAINING DATA ###############
-
-def create_maynard_training_set(dest_dir):
-	maynard_dir = os.path.expanduser("~/Documents/Splotch_projects/Splotch_DLPFC/data/")
-	fullres_dir = os.path.expanduser("~/Desktop/Visium/Maynard_ImageData/")
-
-	class_names = ["Layer1", "Layer2", "Layer3", "Layer4", "Layer5", "Layer6", "WM"]
-	
-	slides = [151507, 151508, 151509, 151510, 151669, 151670, 151671, 151672, 
-		151673, 151674, 151675, 151676]
-
-	patch_size = 256
-
-	patch_dir = os.path.join(dest_dir, "imgs")
-	label_dir = os.path.join(dest_dir, "lbls")
-	for dname in [patch_dir, label_dir]:
-		if not os.path.isdir(dname):
-			os.mkdir(dname)
-
-	for s in slides:
-		print(s)
-
-		annot_file = os.path.join(maynard_dir, "%d_loupe_annots.csv" % s)
-		tpl_file = os.path.join(maynard_dir, "%d_tissue_positions_list.csv" % s)
-
-		img_file = os.path.join(fullres_dir, "%d_full_image.tif" % s)
-
-		patch_grid = grid_from_wsi(img_file, tpl_file, patch_size)
-		label_grid = to_hexagdly_label_tensor(annot_file, tpl_file, class_names)
-
-		if not os.path.isdir(os.path.join(patch_dir, "%d" % s)):
-			os.mkdir(os.path.join(patch_dir, "%d" % s))
-
-		for oddu_x in range(VISIUM_H_ST):
-			for oddu_y in range(VISIUM_W_ST):
-				if patch_grid[oddu_y, oddu_x].max() > 0:
-					patch = patch_grid[oddu_y, oddu_x]
-
-					patch = np.moveaxis(patch.data.numpy().astype(np.uint8), 0, 2)
-					
-					Image.fromarray(patch).save(
-						os.path.join(patch_dir, "%d" % s, "%d_%d.jpg" % (oddu_x, oddu_y)), "JPEG")
-		
-		Image.fromarray(label_grid.data.numpy().astype(np.int32)).save(
-			os.path.join(label_dir, "%d.png" % s), "PNG")
 
 def test_maynard_training_set(dest_dir):
 	patch_dir = os.path.join(dest_dir, "imgs")

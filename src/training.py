@@ -1,9 +1,8 @@
 import sys, os
-sys.path.append("..")
-import patch_classifier as pc
-import gridnet_patches as gn
-from datasets import PatchDataset, PatchGridDataset
-from utils import cmat_auroc, all_fgd_predictions
+from . import patch_classifier as pc
+from . import gridnet_patches as gn
+from .datasets import PatchDataset, PatchGridDataset
+from .utils import cmat_auroc, all_fgd_predictions
 
 import torch
 import torch.nn as nn
@@ -13,7 +12,7 @@ import numpy as np
 import pickle
 from pathlib import Path
 
-from resnet import resnet18
+from .resnet import resnet18
 
 # Train GridNet in two stages:
 # - Train f
