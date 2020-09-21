@@ -101,7 +101,7 @@ Annotation files are output as CSV files that are compatible with Loupe, thus al
 
 If you found this repository useful, please cite us!
 
-**A convolutional neural network for common coordinate regustration of high-resolution histology images**
+**A convolutional neural network for common coordinate regustration of high-resolution histology images**\
 Aidan C. Daly, Krzysztof J. Geras, Richard A. Bonneau.\
 Manuscript in submission\
 2020
