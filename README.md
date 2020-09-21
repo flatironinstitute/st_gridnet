@@ -1,7 +1,12 @@
 # GridNet: A convolutional neural network for common coordinate registration of high-resolution histopathology images
 
 ## Introduction
-This is an implementation of the model described in our publication "A convolutional neural network for common-coordinate registration of high-resolution histology images," which was developed principally for applications to registration of data collected during solid-phase capture spatial transcriptomics (ST) experiments.
+This is an implementation of the model described in our publication [A convolutional neural network for common-coordinate registration of high-resolution histology images](https://www.biorxiv.org/content/10.1101/2020.09.18.303875v1) which was developed principally for applications to registration of data collected during solid-phase capture spatial transcriptomics (ST) experiments. Registration in this context involves assigning tissue type to discrete regions of interest across large histology images, which in the case of spatial transcriptomics assays can be the locations of mRNA capture spots, in order to enable quantitative comparison of transcriptomic measurements gathered in similar regions across disparate tissue. This implementation allows users to either apply a pre-trained model to data from ST or Visium experiments, or to train their own models from manually annotated image data. 
+
+For each tissue of interest, GridNet expects the following information:
+* Whole-slide image file
+* Locations of foreground (tissue-containing) spots in ST grid
+* Class assignments for each foreground spot (if training a new model)
 
 ![GridNet schematic](publication/GridNet.jpg)
 
@@ -19,11 +24,6 @@ This is an implementation of the model described in our publication "A convoluti
 ## Running the code
 
 ### Generating training data
-
-For each tissue of interest, GridNet expects the following information:
-* Whole-slide image file
-* Locations of foreground (tissue-containing) spots in ST grid
-* Class assignments for each foreground spot (if training a new model)
 
 At a low level, training data are expected to be provided in two directories with the following structure:
 ```
@@ -100,6 +100,23 @@ Annotation files are output as CSV files that are compatible with Loupe, thus al
 ## Citation
 
 If you found this repository useful, please cite us!
+
+**A convolutional neural network for common coordinate regustration of high-resolution histology images**
+Aidan C. Daly, Krzysztof J. Geras, Richard A. Bonneau.\
+Manuscript in submission\
+2020
+
+    @article {Daly2020.09.18.303875,
+        author = {Daly, Aidan C and Geras, Krzysztof J and Bonneau, Richard A},
+        title = {A convolutional neural network for common coordinate registration of high-resolution histology images},
+        elocation-id = {2020.09.18.303875},
+        year = {2020},
+        doi = {10.1101/2020.09.18.303875},
+        publisher = {Cold Spring Harbor Laboratory},
+        URL = {https://www.biorxiv.org/content/early/2020/09/20/2020.09.18.303875},
+        eprint = {https://www.biorxiv.org/content/early/2020/09/20/2020.09.18.303875.full.pdf},
+        journal = {bioRxiv}
+    }
 
 ## References
 
