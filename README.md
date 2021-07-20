@@ -97,6 +97,10 @@ python visium_gridnet.py -m [PATH_TO_MODELFILE] -i [PATH_TO_IMAGEFILE] -t [PATH_
 where the model file contains the state dict of the ```GridNetHex``` model saved with `torch.save(model.state_dict(), model_file)`. We have provided an example of file for a model trained on the 12-array Maynard dataset in ```data/trained_models/gnethex_maynard.pth```, which predicts one of seven annotations for patches of human dorsolateral prefrontal cortex tissue (Layer1, Layer2, Layer3, Layer4, Layer5, Layer6, WM). 
 Annotation files are output as CSV files that are compatible with Loupe, thus allowing users to load the predicted annotations into the Loupe browser for visualization and manual correction (see "Categories" section of the [Loupe documentation](https://support.10xgenomics.com/single-cell-gene-expression/software/visualization/latest/tutorial-interoperability) for further details on importing and exporting of spot labels).
 
+## Data availability
+
+Sample output from ```create_dataset.py``` from each of the three datasets employed in the paper (ABA, Maniatis, and Maynard) can be downloaded [here](https://osf.io/mj85k/?view_only=4db599e539274f689bab7efccd544f7a).
+
 ## Citation
 
 If you found this repository useful, please cite us!
