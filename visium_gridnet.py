@@ -47,10 +47,24 @@ def pseudo_hex_to_oddr(col, row):
 	- fullres_imgfile: path to full-resolution image of tissue on Visium array.
 	- tissue_positions_listfile: path to tissue_positions_list.csv, exported by spaceranger,
 	  which maps Visium array indices to pixel coordinates in full-resolution image.
-	- patch_size: size of image patches to be extracted.
+	- patch_size: size of image patches.
+	- window_size: size of the window around each patch to be extracted.
 '''
-def grid_from_wsi(fullres_imgfile, tissue_positions_listfile, patch_size=256, preprocess_xform=None):
+def grid_from_wsi(fullres_imgfile, tissue_positions_listfile, patch_size=256, window_size=256, 
+	preprocess_xform=None):
+	
 	img = np.array(Image.open(fullres_imgfile))
+	ydim, xdim = img.shape[:2]
+
+	if window_size is None:
+		w = patch_size
+	elif isinstance(window_size, float):
+		w = int(window_size * xdim)
+	elif not isinstance(window_size, int):
+		raise ValueError("Window size must be a float or int")
+
+	# Pad image such that no patches extend beyond image boundaries
+	img = np.pad(wsi_img, pad_width=[(w//2, w//2), (w//2, w//2), (0,0)], mode='edge')
 
 	df = pd.read_csv(tissue_positions_listfile, sep=",", header=None, 
 		names=['barcode', 'in_tissue', 'array_row', 'array_col', 'px_row', 'px_col'])
@@ -81,8 +95,13 @@ def grid_from_wsi(fullres_imgfile, tissue_positions_listfile, patch_size=256, pr
 		x_ind, y_ind = st_oddu[:,i]
 		x_px, y_px = df.iloc[i]['px_col'], df.iloc[i]['px_row']
 
-		patch = img[(y_px-patch_size//2):(y_px+patch_size//2), 
-			(x_px-patch_size//2):(x_px+patch_size//2)]
+		# Account for image padding
+		x_px += w//2
+		y_px += w//2
+
+		patch = img[(y_px-w//2):(y_px+w//2), 
+			(x_px-w//2):(x_px+w//2)]
+		patch = np.array(Image.fromarray(patch).resize((patch_size, patch_size)))
 		
 		patch = torch.from_numpy(patch).permute(2,0,1)
 		if preprocess_xform is not None:

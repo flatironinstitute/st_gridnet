@@ -9,12 +9,22 @@ Image.MAX_IMAGE_PIXELS = 100000000
 
 ############### MANIATIS DATASET ###############
 
-# window_size: extract patches size proporitonally to image width, then down/upsample to patch_size.
+# window_size: extract patches size proportionally to image width, then down/upsample to patch_size.
 # - Handles differing resolutions encountered in Maniatis data.
 def extract_patches(img_file, st_coords, mapping_fn, patch_size, out_dir, array_name,
 	window_size=None, ccdist=194):
 	img = np.array(Image.open(img_file))
 	ydim, xdim = img.shape[:2]
+
+	if window_size is None:
+		w = patch_size
+	elif isinstance(window_size, float):
+		w = int(window_size * xdim)
+	elif not isinstance(window_size, int):
+		raise ValueError("Window size must be a float or int")
+
+	# Pad image such that no patches extend beyond image boundaries
+	img = np.pad(img, pad_width=[(w//2, w//2), (w//2, w//2), (0,0)], mode='edge')
 
 	# Create a sub-directory within the patch directory for the current array
 	if not os.path.isdir(os.path.join(out_dir, array_name)):
@@ -23,17 +33,13 @@ def extract_patches(img_file, st_coords, mapping_fn, patch_size, out_dir, array_
 	# Extract a separate jpg file for each patch and save in the subdirectory, with name indicating ST coordinates.
 	for x,y in st_coords:
 		pixel_x, pixel_y = mapping_fn([x,y], xdim, ydim, ccdist)
+		# Account for padding
+		pixel_x += w//2
+		pixel_y += w//2 
 
-		if window_size is not None:
-			# Extract a patch that is relatively sized to the current image
-			w = int(window_size * xdim)
-			patch = img[(pixel_y-w//2):(pixel_y+w//2), 
-				(pixel_x-w//2):(pixel_x+w//2)]
-			# Resize patch to match patch_size
-			patch = np.array(Image.fromarray(patch).resize((patch_size, patch_size)))
-		else:
-			patch = img[(pixel_y-patch_size//2):(pixel_y+patch_size//2), 
-				(pixel_x-patch_size//2):(pixel_x+patch_size//2)]
+		patch = img[(pixel_y-w//2):(pixel_y+w//2), 
+			(pixel_x-w//2):(pixel_x+w//2)]
+		patch = np.array(Image.fromarray(patch).resize((patch_size, patch_size)))
 
 		spotfile = "%d_%d.jpg" % (int(np.rint(x)),int(np.rint(y)))
 		Image.fromarray(patch).save(os.path.join(out_dir, array_name, spotfile))
@@ -51,7 +57,7 @@ def st_to_pixel(c, xdim, ydim, ccdist=194):
 	pixel_y = int(pixel_dim * (c[1]-1))
 	return [pixel_x, pixel_y]
 
-def create_cartesian_dataset(wsi_files, annot_files, out_dir, patch_size=256, ccdist=194):
+def create_cartesian_dataset(wsi_files, annot_files, out_dir, patch_size=256, window_size=256, ccdist=194):
 	patch_dir = os.path.join(out_dir, "imgs%d" % patch_size)
 	label_dir = os.path.join(out_dir, "lbls%d" % patch_size)
 
@@ -79,8 +85,8 @@ def create_cartesian_dataset(wsi_files, annot_files, out_dir, patch_size=256, cc
 		fgd_inds = np.array(df).max(axis=0) > 0 # MUST ensure that all spots have annotations!!
 		create_labelmat(st_coords[fgd_inds], aar_inds[fgd_inds], st_dims, label_dir, slide)
 
-		extract_patches(img_file, st_coords[fgd_inds], st_to_pixel, 256, patch_dir, slide,
-			ccdist=ccdist)
+		extract_patches(img_file, st_coords[fgd_inds], st_to_pixel, patch_size, patch_dir, slide,
+			ccdist=ccdist, window_size=window_size)
 
 
 ############### MAYNARD DATASET ###############
@@ -89,7 +95,8 @@ from visium_gridnet import VISIUM_H_ST, VISIUM_W_ST
 from visium_gridnet import grid_from_wsi, to_hexagdly_label_tensor
 
 
-def create_visium_dataset(wsi_files, annot_files, tpl_files, dest_dir, class_names, patch_size=256):
+def create_visium_dataset(wsi_files, annot_files, tpl_files, dest_dir, class_names, patch_size=256,
+	window_size=None):
 	if not os.path.isdir(dest_dir):
 		os.mkdir(dest_dir)
 	patch_dir = os.path.join(dest_dir, "imgs")
@@ -109,7 +116,7 @@ def create_visium_dataset(wsi_files, annot_files, tpl_files, dest_dir, class_nam
 			slide = tpl_file.split(".")[0]
 
 		# Generate patch grid tensor (H_ST, W_ST, C, H_p, W_p) and label tensor (H_ST, W_ST)
-		patch_grid = grid_from_wsi(img_file, tpl_file, patch_size)
+		patch_grid = grid_from_wsi(img_file, tpl_file, patch_size=patch_size, window_size=window_size)
 		label_grid = to_hexagdly_label_tensor(annot_file, tpl_file, class_names)
 
 		if not os.path.isdir(os.path.join(patch_dir, "%s" % slide)):
@@ -142,6 +149,7 @@ if __name__ == "__main__":
 	parser.add_argument('-t', '--tpls', nargs='+', help='Tissue position listfiles corresponding to training images (required for Visium)')
 	parser.add_argument('-c', '--class-names', nargs='+', help='Class names (will be inferred from first annotation file if not provided)')
 	parser.add_argument('-p', '--patch-size', type=int, default=256, help='Size of patches (in pixels)')
+	parser.add_argument('-w', '--window_size', type=int, default=256, help='Size of window around each spot (in pixels)')
 	parser.add_argument('-d', '--ccdist', type=int, default=194, help='Center-center distance for Cartesian ST spots in an image with long dimension 6200px')
 	args = parser.parse_args()
 
@@ -154,8 +162,10 @@ if __name__ == "__main__":
 			df = pd.read_csv(args.annots[0], sep=",", header=0, names=['barcode', 'annotation'])
 			args.class_names = list(np.unique(df['annotation']))
 
-		create_visium_dataset(args.imgs, args.annots, args.tpls, args.outdir, args.class_names, args.patch_size)
+		create_visium_dataset(args.imgs, args.annots, args.tpls, args.outdir, args.class_names, 
+			patch_size=args.patch_size, window_size=window_size)
 
 	else:
-		create_cartesian_dataset(args.imgs, args.annots, args.outdir, args.patch_size, args.ccdist)
+		create_cartesian_dataset(args.imgs, args.annots, args.outdir, 
+			patch_size=args.patch_size, window_size=args.window_size, ccdist=args.ccdist)
 
