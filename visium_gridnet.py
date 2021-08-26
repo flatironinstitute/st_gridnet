@@ -38,7 +38,7 @@ def pseudo_hex_to_oddr(col, row):
 	else:
 		x = (col-1)/2
 	y = row
-	return x, y
+	return int(x), int(y)
 
 
 ############### VISIUM TO GRIDNET INPUTS ###############
@@ -60,7 +60,9 @@ def grid_from_wsi(fullres_imgfile, tissue_positions_listfile, patch_size=256, wi
 		w = patch_size
 	elif isinstance(window_size, float):
 		w = int(window_size * xdim)
-	elif not isinstance(window_size, int):
+	elif isinstance(window_size, int):
+		w = window_size
+	else:
 		raise ValueError("Window size must be a float or int")
 
 	# Pad image such that no patches extend beyond image boundaries
