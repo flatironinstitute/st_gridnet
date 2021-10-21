@@ -66,7 +66,7 @@ def grid_from_wsi(fullres_imgfile, tissue_positions_listfile, patch_size=256, wi
 		raise ValueError("Window size must be a float or int")
 
 	# Pad image such that no patches extend beyond image boundaries
-	img = np.pad(wsi_img, pad_width=[(w//2, w//2), (w//2, w//2), (0,0)], mode='edge')
+	img = np.pad(img, pad_width=((w//2, w//2), (w//2, w//2), (0,0)), mode='edge')
 
 	df = pd.read_csv(tissue_positions_listfile, sep=",", header=None, 
 		names=['barcode', 'in_tissue', 'array_row', 'array_col', 'px_row', 'px_col'])
@@ -163,6 +163,10 @@ def to_hexagdly_label_tensor(loupe_annotfile, tissue_positions_listfile, class_n
 	label_tensor = torch.zeros(VISIUM_W_ST, VISIUM_H_ST)
 	for i in range(len(df)):
 		row = df.iloc[i]
+
+		# Skip un-annotated spots
+		if not row['barcode'] in af['barcode']:
+			continue
 
 		a_row = af[af['barcode']==row['barcode']]
 		annot_name = a_row['annotation'].iloc[0]
